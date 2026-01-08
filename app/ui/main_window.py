@@ -333,43 +333,52 @@ def main(page: ft.Page):
     # --- Content Container ---
     content_container = ft.Container(content=accounts_view, expand=True)
 
-    def handle_tab_change(e):
-        selected = list(e.control.selected)[0]
-        if selected == 0:
+    def switch_tab(tab_index):
+        if tab_index == 0:
             content_container.content = accounts_view
+            btn_accounts.style = ft.ButtonStyle(color="blue200", bgcolor="grey900")
+            btn_settings.style = ft.ButtonStyle(color="grey", bgcolor="transparent")
         else:
             content_container.content = settings_view
+            btn_accounts.style = ft.ButtonStyle(color="grey", bgcolor="transparent")
+            btn_settings.style = ft.ButtonStyle(color="blue200", bgcolor="grey900")
         page.update()
 
-    # --- Tab Selection (SegmentedButton) ---
-    tab_switcher = ft.SegmentedButton(
-        selected=[0],
-        on_change=handle_tab_change,
-        allow_empty_selection=False,
-        allow_multiple_selection=False,
-        segments=[
-            ft.Segment(
-                value=0,
-                label=ft.Text("Tài khoản"),
-                icon=ft.Icon(ft.Icons.PEOPLE_OUTLINE),
-            ),
-            ft.Segment(
-                value=1,
-                label=ft.Text("Cài đặt"),
-                icon=ft.Icon(ft.Icons.SETTINGS_OUTLINED),
-            ),
-        ],
+    # --- Custom Tab Buttons ---
+    btn_accounts = ft.TextButton(
+        content=ft.Row([ft.Icon(ft.Icons.PEOPLE_OUTLINE, size=16), ft.Text("Tài khoản", size=13)], spacing=8),
+        style=ft.ButtonStyle(color="blue200", bgcolor="grey900"),
+        on_click=lambda _: switch_tab(0),
+        width=130,
+        height=35
+    )
+    
+    btn_settings = ft.TextButton(
+        content=ft.Row([ft.Icon(ft.Icons.SETTINGS_OUTLINED, size=16), ft.Text("Cài đặt", size=13)], spacing=8),
+        style=ft.ButtonStyle(color="grey", bgcolor="transparent"),
+        on_click=lambda _: switch_tab(1),
+        width=130,
+        height=35
+    )
+
+    tab_row = ft.Container(
+        content=ft.Row([btn_accounts, btn_settings], spacing=0),
+        bgcolor="black",
+        border_radius=8,
+        padding=2
     )
 
     page.add(
         ft.Row([
-            ft.Image(src="/icon.png", width=35, height=35, border_radius=5), 
-            ft.Text("Antigravity Agent", size=24, weight="bold", expand=True),
+            ft.Image(src="icon.png", width=30, height=30, border_radius=5), 
+            ft.Text("Antigravity Agent", size=20, weight="bold"),
+            ft.VerticalDivider(width=20, color="transparent"), # Khoảng cách nhỏ
+            tab_row,
+            ft.Container(expand=True), # Đẩy các phần tử còn lại sang phải
             status_indicator,
-            ft.IconButton(ft.Icons.REFRESH, on_click=refresh_ui, tooltip="Làm mới trạng thái")
-        ]),
+            ft.IconButton(ft.Icons.REFRESH, on_click=refresh_ui, tooltip="Làm mới trạng thái", icon_size=18)
+        ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
         ft.Divider(height=1, color="grey700"),
-        ft.Container(content=tab_switcher, margin=ft.margin.only(bottom=10)),
         content_container
     )
     
