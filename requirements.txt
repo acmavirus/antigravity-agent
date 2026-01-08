@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+flet
+psutil
+httpx
+protobuf
+pystray
+Pillow
+python-dotenv
+pydantic

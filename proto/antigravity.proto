@@ -1,0 +1,70 @@
+syntax = "proto3";
+package google.internal.antigravity;
+
+message SessionResponse {
+    HistoryWrapper history = 1;
+    bytes flags_f5 = 5;
+    AuthInfo auth = 6;
+    bytes f7 = 7;
+    bytes f9 = 9;
+    bytes f11 = 11;
+    bytes user_id_raw = 15;
+    bytes f18 = 18;
+    UserContext context = 19;
+}
+
+message HistoryWrapper {
+    repeated HistoryEntry items = 1;
+}
+
+message HistoryEntry {
+    string session_id = 1;
+    // Nested details are stored raw to preserve structure
+    bytes detail_raw = 2;
+}
+
+message AuthInfo {
+    string access_token = 1;
+    string type = 2;
+    string id_token = 3;
+    AuthMetadata meta = 4;
+}
+
+message AuthMetadata {
+    int64 expiry_timestamp = 1;
+}
+
+message UserContext {
+    int32 status = 2;
+    string plan_name = 3;
+    string email = 7;
+    ModelConfig models = 33;
+    PlanConfig plan = 36;
+}
+
+message ModelConfig {
+    repeated ModelItem items = 1;
+    RecommendedModel recommended = 2;
+    bytes unknown_f3 = 3;
+}
+
+message ModelItem {
+    string name = 1;
+    bytes unknown_f2 = 2;
+    int64 unknown_f5 = 5;
+    int64 unknown_f11 = 11;
+    bytes unknown_f15 = 15;
+}
+
+message RecommendedModel {
+    repeated string names = 1;
+    bytes unknown_f2 = 2;
+}
+
+message PlanConfig {
+    string slug = 1;
+    string name = 2;
+    string description = 3;
+    string upgrade_url = 7;
+    string upgrade_msg = 8;
+}
