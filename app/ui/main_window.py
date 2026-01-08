@@ -6,6 +6,7 @@ from app.core.account_manager import AccountManager
 from app.core.auth_handler import AuthHandler
 from app.core.config import get_antigravity_path, set_antigravity_path
 from app.services.quota_service import QuotaService, AccountQuota, ModelQuota
+from app.services.notification_service import NotificationService
 
 def main(page: ft.Page):
     page.title = "Antigravity Agent"
@@ -250,6 +251,8 @@ def main(page: ft.Page):
         quota_loading.value = "⏳ Đang tải quota..."
         page.update()
         
+        notification_svc = NotificationService.get_instance()
+        
         try:
             # Get accounts with state data
             accounts = AccountManager.list_accounts(include_state=True)
@@ -261,8 +264,22 @@ def main(page: ft.Page):
                 if state:
                     quota = await QuotaService.get_account_quota(state)
                     account_quotas[email] = quota
+                    
+                    # Lưu thời gian reset để theo dõi thông báo
+                    if quota.models:
+                        for model in quota.models:
+                            if model.reset_text:
+                                notification_svc.update_reset_schedule(
+                                    email=email,
+                                    model_name=model.model_name,
+                                    reset_time_str=model.reset_text
+                                )
             
-            quota_loading.value = f"✅ Đã cập nhật quota ({len(accounts)} tài khoản)"
+            # Xóa các lịch cũ đã thông báo
+            notification_svc.clear_old_schedules()
+            
+            pending = len(notification_svc.get_pending_resets())
+            quota_loading.value = f"✅ Đã cập nhật quota ({len(accounts)} tài khoản, {pending} lịch reset)"
             quota_loading.color = "green"
         except Exception as ex:
             quota_loading.value = f"❌ Lỗi: {str(ex)}"
@@ -383,6 +400,10 @@ def main(page: ft.Page):
     )
     
     refresh_ui()
+    
+    # Khởi động monitor thông báo reset
+    notification_svc = NotificationService.get_instance()
+    notification_svc.start_monitor(interval_seconds=60)  # Kiểm tra mỗi 60 giây
 
 if __name__ == "__main__":
     ft.app(target=main)
