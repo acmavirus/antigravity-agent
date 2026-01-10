@@ -17,9 +17,11 @@ RESET_TRACKER_FILE = os.path.join(os.environ.get('APPDATA', ''), 'AntigravityAge
 class ResetSchedule:
     """Thông tin lịch reset của một model."""
     email: str
-    model_name: str
-    reset_time: datetime  # Thời gian reset (UTC)
+    model_id: str     # ID kỹ thuật (ví dụ: gemini-3-pro-high)
+    model_name: str   # Tên hiển thị (ví dụ: Gemini 3 Pro High)
+    reset_time: datetime  # Thời gian reset (UTC+7)
     notified: bool = False  # Đã thông báo chưa
+    triggered: bool = False # Đã gửi tin nhắn 'Hi' chưa
 
 
 class NotificationService:
@@ -54,9 +56,11 @@ class NotificationService:
                     for key, item in data.items():
                         self._schedules[key] = ResetSchedule(
                             email=item['email'],
+                            model_id=item.get('model_id', ''),
                             model_name=item['model_name'],
                             reset_time=datetime.fromisoformat(item['reset_time']),
-                            notified=item.get('notified', False)
+                            notified=item.get('notified', False),
+                            triggered=item.get('triggered', False)
                         )
         except Exception as e:
             print(f"Error loading reset schedules: {e}")
@@ -69,16 +73,18 @@ class NotificationService:
             for key, schedule in self._schedules.items():
                 data[key] = {
                     'email': schedule.email,
+                    'model_id': schedule.model_id,
                     'model_name': schedule.model_name,
                     'reset_time': schedule.reset_time.isoformat(),
-                    'notified': schedule.notified
+                    'notified': schedule.notified,
+                    'triggered': schedule.triggered
                 }
             with open(RESET_TRACKER_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"Error saving reset schedules: {e}")
     
-    def update_reset_schedule(self, email: str, model_name: str, reset_time_str: str):
+    def update_reset_schedule(self, email: str, model_id: str, model_name: str, reset_time_str: str):
         """Cập nhật lịch reset cho một model."""
         if not reset_time_str:
             return
@@ -97,13 +103,21 @@ class NotificationService:
             
             key = self._get_schedule_key(email, model_name)
             
-            # Chỉ cập nhật nếu thời gian khác hoặc chưa có
-            if key not in self._schedules or self._schedules[key].reset_time != reset_dt:
+            # Nếu thời gian reset mới xa hơn thời gian hiện tại ít nhất 1 phút, reset flag triggered
+            is_new_cycle = False
+            if key in self._schedules:
+                if reset_dt > self._schedules[key].reset_time + timedelta(minutes=5):
+                    is_new_cycle = True
+
+            # Cập nhật hoặc thêm mới
+            if key not in self._schedules or is_new_cycle or self._schedules[key].reset_time != reset_dt:
                 self._schedules[key] = ResetSchedule(
                     email=email,
+                    model_id=model_id,
                     model_name=model_name,
                     reset_time=reset_dt,
-                    notified=False
+                    notified=False,
+                    triggered=False
                 )
                 self._save_schedules()
                 print(f"[Notification] Scheduled reset for {model_name} ({email}) at {reset_time_str}")
@@ -133,27 +147,63 @@ class NotificationService:
             print(f"Error sending notification: {e}")
     
     def check_and_notify(self):
-        """Kiểm tra và gửi thông báo cho các model đã reset."""
+        """Kiểm tra và gửi thông báo + tự động preheat cho các model đã reset."""
         now = datetime.now(timezone(timedelta(hours=7)))
         
         for key, schedule in list(self._schedules.items()):
-            if schedule.notified:
-                continue
-            
             # So sánh thời gian
             reset_time = schedule.reset_time
             if reset_time.tzinfo is None:
                 reset_time = reset_time.replace(tzinfo=timezone(timedelta(hours=7)))
             
-            if now >= reset_time:
-                # Đã đến lúc reset!
+            # 1. Gửi thông báo khi đến giờ reset
+            if now >= reset_time and not schedule.notified:
                 self.send_notification(
                     title=f"🔄 Model đã Reset!",
-                    message=f"{schedule.model_name}\nTài khoản: {schedule.email}\nQuota đã được làm mới!"
+                    message=f"{schedule.model_name}\nTài khoản: {schedule.email}\nHệ thống sẽ tự động gửi 'Hi' để bắt đầu chu kỳ mới."
                 )
                 schedule.notified = True
                 self._save_schedules()
-                print(f"[Notification] Sent reset notification for {schedule.model_name}")
+                print(f"[Notification] Sent reset notification for {schedule.model_name} ({schedule.email})")
+
+            # 2. Tự động gửi 'Hi' để kích hoạt chu kỳ mới (Preheat)
+            if now >= reset_time and not schedule.triggered:
+                # Thực hiện preheat trong thread riêng để không block monitor
+                threading.Thread(target=self._perform_preheat, args=(schedule,), daemon=True).start()
+                schedule.triggered = True
+                self._save_schedules()
+
+    def _perform_preheat(self, schedule: ResetSchedule):
+        """Thực hiện gọi API để gửi tin nhắn 'Hi'."""
+        try:
+            from app.services.quota_service import QuotaService
+            from app.core.account_manager import AccountManager
+            import asyncio
+
+            async def do_trigger():
+                # Lấy state mới nhất của email này
+                accounts = AccountManager.list_accounts(include_state=True)
+                target_acc = next((a for a in accounts if a["email"] == schedule.email), None)
+                
+                if target_acc and target_acc.get("state"):
+                    success = await QuotaService.trigger_model_preheat_by_state(
+                        target_acc["state"], 
+                        schedule.model_id
+                    )
+                    if success:
+                        print(f"[Trigger] Successfully preheated {schedule.model_name} for {schedule.email}")
+                    else:
+                        print(f"[Trigger] Failed to preheat {schedule.model_name} for {schedule.email}")
+                else:
+                    print(f"[Trigger] Could not find state for {schedule.email}")
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(do_trigger())
+            loop.close()
+
+        except Exception as e:
+            print(f"Error in _perform_preheat: {e}")
     
     def start_monitor(self, interval_seconds: int = 60):
         """Bắt đầu thread kiểm tra thông báo."""

@@ -15,7 +15,8 @@ from app.core.auth_handler import AuthHandler
 @dataclass
 class ModelQuota:
     """Thông tin quota của một model."""
-    model_name: str
+    model_id: str            # ID kỹ thuật
+    model_name: str          # Tên hiển thị
     percentage: float = 0.0  # Phần trăm còn lại (0-100)
     reset_text: str = ""     # Thời gian reset (chuỗi từ API)
     
@@ -192,6 +193,7 @@ class QuotaService:
                 reset_time_formatted = QuotaService.format_reset_time(reset_time_raw)
                 
                 models_list.append(ModelQuota(
+                    model_id=key,
                     model_name=display_name,
                     percentage=fraction * 100.0,
                     reset_text=reset_time_formatted
@@ -224,3 +226,54 @@ class QuotaService:
         import asyncio
         tasks = [QuotaService.get_account_quota(acc.get("state", "")) for acc in accounts_data if acc.get("state")]
         return await asyncio.gather(*tasks)
+
+    @staticmethod
+    async def trigger_preheat(access_token: str, project_id: str, model_id: str) -> bool:
+        """Gửi một tin nhắn 'Hi' để kích hoạt (preheat) model."""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{QuotaService.BASE_URL}/v1internal:generateContent",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "Content-Type": "application/json",
+                        "User-Agent": "antigravity/windows/amd64",
+                    },
+                    json={
+                        "project": project_id,
+                        "model": model_id,
+                        "contents": [{"role": "user", "parts": [{"text": "Hi"}]}]
+                    },
+                    timeout=15.0
+                )
+                if response.status_code == 200:
+                    return True
+                else:
+                    print(f"Preheat response error ({response.status_code}): {response.text}")
+                    return False
+        except Exception as e:
+            print(f"Preheat error for {model_id}: {e}")
+            return False
+
+    @staticmethod
+    async def trigger_model_preheat_by_state(b64_state: str, model_id: str) -> bool:
+        """Thực hiện preheat đầy đủ các bước từ b64_state."""
+        session = AuthHandler.decode_session_state(b64_state)
+        if not session or not session.auth:
+            return False
+
+        access_token = session.auth.access_token
+        refresh_token = session.auth.id_token
+        
+        # 1. Lấy Project ID (với token refresh nếu cần)
+        project_id = await QuotaService.fetch_project_id(access_token)
+        if not project_id:
+            access_token = await QuotaService.refresh_access_token(refresh_token)
+            if access_token:
+                project_id = await QuotaService.fetch_project_id(access_token)
+        
+        if not project_id or not access_token:
+            return False
+
+        # 2. Gọi API trigger
+        return await QuotaService.trigger_preheat(access_token, project_id, model_id)

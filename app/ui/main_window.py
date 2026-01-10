@@ -271,6 +271,7 @@ def main(page: ft.Page):
                             if model.reset_text:
                                 notification_svc.update_reset_schedule(
                                     email=email,
+                                    model_id=model.model_id,
                                     model_name=model.model_name,
                                     reset_time_str=model.reset_text
                                 )
