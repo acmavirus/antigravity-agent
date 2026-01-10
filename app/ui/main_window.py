@@ -407,14 +407,15 @@ def main(page: ft.Page):
             content=ft.Container(
                 content=ft.Column([
                     ft.Row([
-                        ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE, color="orange"),
-                        ft.Text("Kiểm tra Thông báo & Auto-Preheat", size=14, weight="bold"),
+                        ft.Icon(ft.Icons.ROCKET_LAUNCH, color="orange"),
+                        ft.Text("Preheat tất cả Model", size=14, weight="bold"),
                     ]),
-                    ft.Text("Nhấn nút bên dưới để test thông báo Windows và chức năng tự động gửi 'Hi'.", size=12, color="grey"),
+                    ft.Text("Gửi tin nhắn 'Hi' đến tất cả model để bắt đầu chu kỳ quota ngay lập tức.", size=12, color="grey"),
+                    preheat_status := ft.Text("", size=12, color="grey"),
                     ft.ElevatedButton(
-                        "🔔 Test Thông báo", 
-                        icon=ft.Icons.SEND,
-                        on_click=lambda e: test_notification_handler(e),
+                        "🔥 Preheat Ngay", 
+                        icon=ft.Icons.FLASH_ON,
+                        on_click=lambda e: trigger_preheat_all(e),
                         bgcolor="orange",
                         color="white"
                     ),
@@ -424,26 +425,67 @@ def main(page: ft.Page):
         )
     ])
     
-    def test_notification_handler(e):
-        """Xử lý nút test thông báo."""
-        notification_svc = NotificationService.get_instance()
-        
-        # Lấy email từ tài khoản đầu tiên (nếu có)
+    async def do_preheat_all():
+        """Thực hiện preheat cho tất cả model."""
         accounts = AccountManager.list_accounts(include_state=True)
-        if accounts:
-            email = accounts[0].get("email", "test@example.com")
-            state = accounts[0].get("state", "")
-        else:
-            email = "test@example.com"
-            state = ""
+        if not accounts:
+            add_notification("Lỗi Preheat", "Không có tài khoản nào!", "warning")
+            return
         
-        notification_svc.test_notification(
-            email=email,
-            model_id="gemini-3-flash",
-            model_name="[TEST] Gemini 3 Flash"
+        total_success = 0
+        total_failed = 0
+        
+        for acc in accounts:
+            email = acc.get("email", "Unknown")
+            state = acc.get("state")
+            if not state:
+                continue
+            
+            add_notification("Đang Preheat", f"Tài khoản: {email}", "info")
+            
+            # Preheat cho từng model
+            for model_id, model_name in QuotaService.TARGET_MODELS.items():
+                try:
+                    success = await QuotaService.trigger_model_preheat_by_state(state, model_id)
+                    if success:
+                        total_success += 1
+                        add_notification("Preheat OK", f"{model_name} - {email}", "success")
+                    else:
+                        total_failed += 1
+                except Exception as ex:
+                    total_failed += 1
+                    print(f"Preheat error: {ex}")
+        
+        add_notification(
+            "Preheat Hoàn tất", 
+            f"Thành công: {total_success}, Thất bại: {total_failed}",
+            "success" if total_failed == 0 else "warning"
         )
+    
+    def trigger_preheat_all(e):
+        """Trigger preheat từ nút bấm."""
+        import asyncio
         
-        page.snack_bar = ft.SnackBar(ft.Text("Đã gửi thông báo test! Kiểm tra màn hình."), bgcolor="green")
+        preheat_status.value = "⏳ Đang thực hiện preheat..."
+        page.update()
+        
+        # Chạy async trong thread riêng
+        def run_async():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(do_preheat_all())
+            loop.close()
+            
+            preheat_status.value = "✅ Hoàn tất!"
+            try:
+                page.update()
+            except:
+                pass
+        
+        import threading
+        threading.Thread(target=run_async, daemon=True).start()
+        
+        page.snack_bar = ft.SnackBar(ft.Text("Đang preheat tất cả model... Kiểm tra tab Thông báo."), bgcolor="orange")
         page.snack_bar.open = True
         page.update()
 
