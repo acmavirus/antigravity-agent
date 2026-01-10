@@ -23,6 +23,10 @@ def main(page: ft.Page):
     status_indicator = ft.Container(content=ft.Text("Đã tắt", size=12), bgcolor="grey", border_radius=5, padding=ft.padding.symmetric(horizontal=10, vertical=5))
     current_account_text = ft.Text("Chưa có tài khoản", size=20, weight="bold", color="blue200")
     
+    # In-app notification list
+    notification_list = ft.ListView(expand=1, spacing=5, padding=5, auto_scroll=True)
+    notification_count = ft.Text("0", size=12, color="white")
+    
     # Quota data storage
     account_quotas: dict = {}  # email -> AccountQuota
     quota_loading = ft.Text("", size=12, color="grey")
@@ -74,6 +78,59 @@ def main(page: ft.Page):
         update_path_display()
         page.update()
     
+    def add_notification(title: str, message: str, notif_type: str = "info"):
+        """Thêm thông báo vào danh sách trong app."""
+        from datetime import datetime
+        now = datetime.now().strftime("%H:%M:%S")
+        
+        # Chọn màu theo loại thông báo
+        colors = {
+            "info": "blue",
+            "success": "green", 
+            "warning": "orange",
+            "reset": "purple"
+        }
+        bg_color = colors.get(notif_type, "blue")
+        
+        notif_card = ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.Icons.NOTIFICATIONS, color=bg_color, size=20),
+                ft.Column([
+                    ft.Text(title, size=13, weight="bold", color=bg_color),
+                    ft.Text(message, size=11, color="grey300"),
+                    ft.Text(now, size=10, color="grey500"),
+                ], spacing=2, expand=True),
+                ft.IconButton(
+                    ft.Icons.CLOSE, 
+                    icon_size=14,
+                    on_click=lambda e, c=None: remove_notification(e, notif_card)
+                )
+            ], spacing=10),
+            bgcolor="grey900",
+            border_radius=8,
+            padding=10,
+            border=ft.border.all(1, bg_color)
+        )
+        
+        notification_list.controls.insert(0, notif_card)
+        notification_count.value = str(len(notification_list.controls))
+        
+        try:
+            page.update()
+        except:
+            pass
+    
+    def remove_notification(e, card):
+        """Xóa một thông báo."""
+        if card in notification_list.controls:
+            notification_list.controls.remove(card)
+            notification_count.value = str(len(notification_list.controls))
+            page.update()
+    
+    # Đăng ký callback cho NotificationService
+    notification_svc = NotificationService.get_instance()
+    notification_svc.set_ui_callback(add_notification)
+
     async def handle_browse_path(e):
         """Mở hộp thoại chọn file."""
         # In Flet 0.80.x, FilePicker is a Service, not a Control
@@ -345,21 +402,69 @@ def main(page: ft.Page):
                 ]),
                 padding=20
             )
+        ),
+        ft.Card(
+            content=ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE, color="orange"),
+                        ft.Text("Kiểm tra Thông báo & Auto-Preheat", size=14, weight="bold"),
+                    ]),
+                    ft.Text("Nhấn nút bên dưới để test thông báo Windows và chức năng tự động gửi 'Hi'.", size=12, color="grey"),
+                    ft.ElevatedButton(
+                        "🔔 Test Thông báo", 
+                        icon=ft.Icons.SEND,
+                        on_click=lambda e: test_notification_handler(e),
+                        bgcolor="orange",
+                        color="white"
+                    ),
+                ]),
+                padding=20
+            )
         )
     ])
+    
+    def test_notification_handler(e):
+        """Xử lý nút test thông báo."""
+        notification_svc = NotificationService.get_instance()
+        
+        # Lấy email từ tài khoản đầu tiên (nếu có)
+        accounts = AccountManager.list_accounts(include_state=True)
+        if accounts:
+            email = accounts[0].get("email", "test@example.com")
+            state = accounts[0].get("state", "")
+        else:
+            email = "test@example.com"
+            state = ""
+        
+        notification_svc.test_notification(
+            email=email,
+            model_id="gemini-3-flash",
+            model_name="[TEST] Gemini 3 Flash"
+        )
+        
+        page.snack_bar = ft.SnackBar(ft.Text("Đã gửi thông báo test! Kiểm tra màn hình."), bgcolor="green")
+        page.snack_bar.open = True
+        page.update()
 
     # --- Content Container ---
     content_container = ft.Container(content=accounts_view, expand=True)
 
     def switch_tab(tab_index):
+        # Reset all button styles
+        btn_accounts.style = ft.ButtonStyle(color="grey", bgcolor="transparent")
+        btn_settings.style = ft.ButtonStyle(color="grey", bgcolor="transparent")
+        btn_notifications.style = ft.ButtonStyle(color="grey", bgcolor="transparent")
+        
         if tab_index == 0:
             content_container.content = accounts_view
             btn_accounts.style = ft.ButtonStyle(color="blue200", bgcolor="grey900")
-            btn_settings.style = ft.ButtonStyle(color="grey", bgcolor="transparent")
-        else:
+        elif tab_index == 1:
             content_container.content = settings_view
-            btn_accounts.style = ft.ButtonStyle(color="grey", bgcolor="transparent")
             btn_settings.style = ft.ButtonStyle(color="blue200", bgcolor="grey900")
+        else:
+            content_container.content = notifications_view
+            btn_notifications.style = ft.ButtonStyle(color="blue200", bgcolor="grey900")
         page.update()
 
     # --- Custom Tab Buttons ---
@@ -378,9 +483,56 @@ def main(page: ft.Page):
         width=130,
         height=35
     )
+    
+    btn_notifications = ft.TextButton(
+        content=ft.Row([
+            ft.Icon(ft.Icons.NOTIFICATIONS_OUTLINED, size=16), 
+            ft.Text("Thông báo", size=13),
+            ft.Container(
+                content=notification_count,
+                bgcolor="red",
+                border_radius=10,
+                padding=ft.padding.symmetric(horizontal=6, vertical=2)
+            )
+        ], spacing=6),
+        style=ft.ButtonStyle(color="grey", bgcolor="transparent"),
+        on_click=lambda _: switch_tab(2),
+        width=150,
+        height=35
+    )
+    
+    # Notifications View
+    notifications_view = ft.Column([
+        ft.Card(
+            content=ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE, color="purple"),
+                        ft.Text("Lịch sử thông báo", size=16, weight="bold"),
+                        ft.Container(expand=True),
+                        ft.TextButton("Xóa tất cả", icon=ft.Icons.DELETE_SWEEP, 
+                                      on_click=lambda e: clear_all_notifications())
+                    ]),
+                    ft.Divider(),
+                    ft.Container(
+                        content=notification_list,
+                        height=400,
+                        border=ft.border.all(1, "grey800"),
+                        border_radius=8
+                    )
+                ]),
+                padding=15
+            )
+        )
+    ])
+    
+    def clear_all_notifications():
+        notification_list.controls.clear()
+        notification_count.value = "0"
+        page.update()
 
     tab_row = ft.Container(
-        content=ft.Row([btn_accounts, btn_settings], spacing=0),
+        content=ft.Row([btn_accounts, btn_settings, btn_notifications], spacing=0),
         bgcolor="black",
         border_radius=8,
         padding=2

@@ -229,30 +229,29 @@ class QuotaService:
 
     @staticmethod
     async def trigger_preheat(access_token: str, project_id: str, model_id: str) -> bool:
-        """Gửi một tin nhắn 'Hi' để kích hoạt (preheat) model."""
+        """Gửi một request nhỏ để kích hoạt (preheat) model - chỉ cần gọi API là đủ."""
         try:
             async with httpx.AsyncClient() as client:
+                # Gọi fetchAvailableModels đủ để trigger quota timer
                 response = await client.post(
-                    f"{QuotaService.BASE_URL}/v1internal:generateContent",
+                    f"{QuotaService.BASE_URL}/v1internal:fetchAvailableModels",
                     headers={
                         "Authorization": f"Bearer {access_token}",
                         "Content-Type": "application/json",
                         "User-Agent": "antigravity/windows/amd64",
                     },
-                    json={
-                        "project": project_id,
-                        "model": model_id,
-                        "contents": [{"role": "user", "parts": [{"text": "Hi"}]}]
-                    },
+                    json={"project": project_id},
                     timeout=15.0
                 )
+                
                 if response.status_code == 200:
+                    print(f"[Preheat] Success! API call completed for {model_id}")
                     return True
                 else:
-                    print(f"Preheat response error ({response.status_code}): {response.text}")
+                    print(f"[Preheat] Error ({response.status_code}): {response.text[:200]}")
                     return False
         except Exception as e:
-            print(f"Preheat error for {model_id}: {e}")
+            print(f"[Preheat] Exception for {model_id}: {e}")
             return False
 
     @staticmethod

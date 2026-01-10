@@ -32,6 +32,7 @@ class NotificationService:
     _schedules: Dict[str, ResetSchedule] = {}  # key = "email|model_name"
     _monitor_thread: Optional[threading.Thread] = None
     _running = False
+    _ui_callback = None  # Callback để gửi thông báo lên UI
     
     @classmethod
     def get_instance(cls):
@@ -43,6 +44,11 @@ class NotificationService:
     
     def __init__(self):
         self._load_schedules()
+    
+    def set_ui_callback(self, callback):
+        """Đăng ký callback function để gửi thông báo lên UI."""
+        NotificationService._ui_callback = callback
+        print(f"[Notification] UI callback registered")
     
     def _get_schedule_key(self, email: str, model_name: str) -> str:
         return f"{email}|{model_name}"
@@ -124,31 +130,36 @@ class NotificationService:
         except Exception as e:
             print(f"Error updating reset schedule: {e}")
     
-    def send_notification(self, title: str, message: str):
-        """Gửi thông báo Desktop (Windows Toast)."""
+    def send_notification(self, title: str, message: str, notif_type: str = "reset"):
+        """Gửi thông báo Desktop + UI trong app."""
+        
+        # 1. Gửi thông báo lên UI trong app (luôn hoạt động)
+        if NotificationService._ui_callback:
+            try:
+                NotificationService._ui_callback(title, message, notif_type)
+                print(f"[Notification] Sent to UI: {title}")
+            except Exception as e:
+                print(f"[Notification] UI callback error: {e}")
+        
+        # 2. Thử gửi Windows Toast (có thể không hoạt động trong exe)
         try:
-            # Sử dụng plyer cho cross-platform notifications
             from plyer import notification
             notification.notify(
                 title=title,
                 message=message,
                 app_name="Antigravity Agent",
-                app_icon=None,  # Có thể thêm icon path
+                app_icon=None,
                 timeout=10
             )
-        except ImportError:
-            # Fallback: Sử dụng Windows native toast
-            try:
-                from ctypes import windll
-                windll.user32.MessageBoxW(0, message, title, 0x40)
-            except Exception:
-                print(f"[NOTIFICATION] {title}: {message}")
         except Exception as e:
-            print(f"Error sending notification: {e}")
+            print(f"[Notification] Windows toast skipped: {e}")
     
     def check_and_notify(self):
         """Kiểm tra và gửi thông báo + tự động preheat cho các model đã reset."""
         now = datetime.now(timezone(timedelta(hours=7)))
+        
+        if len(self._schedules) > 0:
+            print(f"[Monitor] Checking {len(self._schedules)} schedules at {now.strftime('%H:%M:%S %d/%m/%Y')}")
         
         for key, schedule in list(self._schedules.items()):
             # So sánh thời gian
@@ -156,11 +167,19 @@ class NotificationService:
             if reset_time.tzinfo is None:
                 reset_time = reset_time.replace(tzinfo=timezone(timedelta(hours=7)))
             
+            # Debug log
+            time_diff = (reset_time - now).total_seconds()
+            if time_diff > 0:
+                print(f"  - {schedule.model_name}: {int(time_diff/60)} mins remaining")
+            else:
+                print(f"  - {schedule.model_name}: READY (notified={schedule.notified}, triggered={schedule.triggered})")
+            
             # 1. Gửi thông báo khi đến giờ reset
             if now >= reset_time and not schedule.notified:
+                print(f"[Notification] Sending notification for {schedule.model_name}...")
                 self.send_notification(
-                    title=f"🔄 Model đã Reset!",
-                    message=f"{schedule.model_name}\nTài khoản: {schedule.email}\nHệ thống sẽ tự động gửi 'Hi' để bắt đầu chu kỳ mới."
+                    title=f"Model da Reset!",
+                    message=f"{schedule.model_name}\nTai khoan: {schedule.email}\nHe thong se tu dong gui 'Hi' de bat dau chu ky moi."
                 )
                 schedule.notified = True
                 self._save_schedules()
@@ -168,6 +187,7 @@ class NotificationService:
 
             # 2. Tự động gửi 'Hi' để kích hoạt chu kỳ mới (Preheat)
             if now >= reset_time and not schedule.triggered:
+                print(f"[Trigger] Starting preheat for {schedule.model_name} (model_id={schedule.model_id})...")
                 # Thực hiện preheat trong thread riêng để không block monitor
                 threading.Thread(target=self._perform_preheat, args=(schedule,), daemon=True).start()
                 schedule.triggered = True
@@ -232,6 +252,34 @@ class NotificationService:
     def get_pending_resets(self) -> List[ResetSchedule]:
         """Lấy danh sách các lịch reset chưa được thông báo."""
         return [s for s in self._schedules.values() if not s.notified]
+    
+    def test_notification(self, email: str = "test@test.com", model_id: str = "gemini-3-flash", model_name: str = "TEST Model"):
+        """Test thông báo bằng cách gửi trực tiếp."""
+        import time
+        
+        print(f"[TEST] Starting notification test for {model_name}...")
+        
+        # 1. Gửi thông báo trực tiếp
+        self.send_notification(
+            title="Model da Reset!",
+            message=f"{model_name}\nTai khoan: {email}\nDay la thong bao TEST!"
+        )
+        print(f"[TEST] Notification sent!")
+        
+        # 2. Thử gọi preheat
+        print(f"[TEST] Attempting preheat for {model_id}...")
+        schedule = ResetSchedule(
+            email=email,
+            model_id=model_id,
+            model_name=model_name,
+            reset_time=datetime.now(timezone(timedelta(hours=7))),
+            notified=True,
+            triggered=False
+        )
+        
+        # Gọi preheat trong thread riêng
+        threading.Thread(target=self._perform_preheat, args=(schedule,), daemon=True).start()
+        print(f"[TEST] Preheat thread started!")
     
     def clear_old_schedules(self):
         """Xóa các lịch reset đã cũ (đã thông báo và quá 24h)."""
