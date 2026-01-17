@@ -1,5 +1,28 @@
+"""
+Antigravity Agent - Main Window
+Modern UI with sidebar navigation and page-based layout
+"""
 import flet as ft
 import asyncio
+import threading
+from typing import Optional
+
+# Theme and components
+from app.ui.theme import ThemeManager, Spacing, Typography, AnimationDuration
+
+# Components
+from app.ui.components.sidebar import Sidebar, NavItem
+from app.ui.components.toast import ToastManager
+from app.ui.components.dialogs import ConfirmDialog, LoadingOverlay
+
+# Pages
+from app.ui.pages.dashboard import DashboardPage
+from app.ui.pages.accounts import AccountsPage
+from app.ui.pages.quota_detail import QuotaDetailPage
+from app.ui.pages.notifications import NotificationsPage
+from app.ui.pages.settings import SettingsPage
+
+# Core services
 from app.core.db_handler import DBHandler, AGENT_STATE_KEY
 from app.core.process_manager import ProcessManager
 from app.core.account_manager import AccountManager
@@ -8,136 +31,456 @@ from app.core.config import get_antigravity_path, set_antigravity_path
 from app.services.quota_service import QuotaService, AccountQuota, ModelQuota
 from app.services.notification_service import NotificationService
 
-def main(page: ft.Page):
-    page.title = "Antigravity Agent"
-    page.window_width = 900
-    page.window_height = 700
-    page.theme_mode = ft.ThemeMode.DARK
-    page.padding = 20
-    page.window_icon = "icon.png" # Trỏ trực tiếp vào file trong assets
 
+def main(page: ft.Page):
+    """Main application entry point."""
+    
+    # === Page Configuration ===
+    page.title = "Antigravity Agent"
+    page.window.width = 1100
+    page.window.height = 750
+    page.window.min_width = 900
+    page.window.min_height = 600
+    page.theme_mode = ft.ThemeMode.DARK
+    page.padding = 0
+    page.bgcolor = "#0d1117"
+    
+    # Try to set window icon
+    try:
+        page.window.icon = "icon.png"
+    except:
+        pass
+    
+    # === Initialize Services ===
+    tm = ThemeManager.get_instance()
+    tm.set_page(page)
+    
     db = DBHandler()
+    toast_manager = ToastManager.get_instance(page)
+    notification_svc = NotificationService.get_instance()
     
-    # Components
-    account_list = ft.ListView(expand=1, spacing=10, padding=10)
-    status_indicator = ft.Container(content=ft.Text("Đã tắt", size=12), bgcolor="grey", border_radius=5, padding=ft.padding.symmetric(horizontal=10, vertical=5))
-    current_account_text = ft.Text("Chưa có tài khoản", size=20, weight="bold", color="blue200")
-    
-    # In-app notification list
-    notification_list = ft.ListView(expand=1, spacing=5, padding=5, auto_scroll=True)
-    notification_count = ft.Text("0", size=12, color="white")
-    
-    # Quota data storage
+    # === State Variables ===
+    current_page_id = "dashboard"
     account_quotas: dict = {}  # email -> AccountQuota
-    quota_loading = ft.Text("", size=12, color="grey")
+    notifications_list: list = []
+    loading_overlay = LoadingOverlay(theme=tm)
     
-    # Path configuration components
-    path_input = ft.TextField(
-        label="Đường dẫn Antigravity.exe",
-        hint_text="VD: D:\\Program Files\\Antigravity\\Antigravity.exe",
-        expand=True,
-        read_only=False
+    # === Toast Container ===
+    toast_container = ft.Column(
+        controls=[],
+        spacing=Spacing.SM,
+        scroll=ft.ScrollMode.AUTO
     )
-    path_status = ft.Text("", size=12, color="grey")
+    toast_manager.set_container(toast_container)
     
-    def update_path_display():
-        """Cập nhật hiển thị đường dẫn hiện tại."""
-        effective_path, source = ProcessManager.get_effective_path()
-        if effective_path:
-            path_input.value = effective_path
-            if source == "saved":
-                path_status.value = "✅ Đường dẫn đã lưu"
-                path_status.color = "green"
-            else:
-                path_status.value = "🔍 Tự động phát hiện"
-                path_status.color = "blue"
-        else:
-            path_input.value = ""
-            path_status.value = "❌ Chưa cấu hình đường dẫn"
-            path_status.color = "red"
+    # === Notification Callback ===
+    def add_notification(title: str, message: str, notif_type: str = "info"):
+        """Add notification to the list and show toast."""
+        from datetime import datetime
+        notifications_list.insert(0, {
+            "id": f"notif_{len(notifications_list)}",
+            "title": title,
+            "message": message,
+            "type": notif_type,
+            "timestamp": datetime.now()
+        })
+        
+        # Show toast
+        toast_manager.show(title, message, notif_type, duration=5000)
+        
+        # Update sidebar badge
+        update_sidebar_badges()
+        
+        # Update notifications page if visible
+        if current_page_id == "notifications" and notifications_page:
+            notifications_page.update_notifications(notifications_list)
     
-    def handle_save_path(e):
-        """Lưu đường dẫn đã nhập."""
-        new_path = path_input.value.strip()
-        if not new_path:
-            page.snack_bar = ft.SnackBar(ft.Text("Vui lòng nhập đường dẫn"), bgcolor="red")
-            page.snack_bar.open = True
-            page.update()
-            return
+    notification_svc.set_ui_callback(add_notification)
+    
+    # === Helper Functions ===
+    def get_current_account_info() -> tuple:
+        """Get current account email and plan."""
+        state = db.read_key(AGENT_STATE_KEY)
+        if state:
+            summary = AuthHandler.get_account_summary(state)
+            return summary.get("email", "Chưa đăng nhập"), summary.get("plan", "Unknown")
+        return "Chưa đăng nhập", "Unknown"
+    
+    def get_accounts_list(include_quota: bool = False) -> list:
+        """Get list of saved accounts with optional quota data."""
+        accounts = AccountManager.list_accounts(include_state=True)
+        current_email, _ = get_current_account_info()
         
-        import pathlib
-        if not pathlib.Path(new_path).exists():
-            page.snack_bar = ft.SnackBar(ft.Text(f"Đường dẫn không tồn tại: {new_path}"), bgcolor="red")
-            page.snack_bar.open = True
-            page.update()
-            return
+        result = []
+        for acc in accounts:
+            email = acc.get("email", "Unknown")
+            quota_data = account_quotas.get(email)
+            
+            result.append({
+                "email": email,
+                "plan": acc.get("plan", "Unknown"),
+                "is_active": email == current_email,
+                "quota_data": quota_data.models if quota_data else []
+            })
         
-        set_antigravity_path(new_path)
-        page.snack_bar = ft.SnackBar(ft.Text(f"Đã lưu đường dẫn: {new_path}"), bgcolor="green")
-        page.snack_bar.open = True
-        update_path_display()
+        return result
+    
+    def update_sidebar_badges():
+        """Update notification badge on sidebar."""
+        unread_count = len(notifications_list)
+        sidebar.update_badge("notifications", unread_count)
+    
+    # === Page Instances ===
+    dashboard_page: Optional[DashboardPage] = None
+    accounts_page: Optional[AccountsPage] = None
+    quota_page: Optional[QuotaDetailPage] = None
+    notifications_page: Optional[NotificationsPage] = None
+    settings_page: Optional[SettingsPage] = None
+    
+    # === Page Builders ===
+    def build_dashboard() -> DashboardPage:
+        """Build the dashboard page."""
+        current_email, current_plan = get_current_account_info()
+        is_running = ProcessManager.is_running()
+        accounts = get_accounts_list()
+        
+        # Get current account quota
+        quota_data = []
+        if current_email in account_quotas:
+            quota_data = [{
+                "model_name": m.model_name,
+                "percentage": m.percentage,
+                "reset_text": m.reset_text
+            } for m in account_quotas[current_email].models]
+        
+        return DashboardPage(
+            current_email=current_email,
+            current_plan=current_plan,
+            is_running=is_running,
+            total_accounts=len(accounts),
+            quota_data=quota_data,
+            on_save_account=handle_save_account,
+            on_stop_app=handle_stop_app,
+            on_refresh_quota=handle_refresh_quotas,
+            on_switch_to_accounts=lambda: handle_nav_change("accounts"),
+            theme=tm
+        )
+    
+    def build_accounts() -> AccountsPage:
+        """Build the accounts page."""
+        accounts = get_accounts_list(include_quota=True)
+        
+        return AccountsPage(
+            accounts=accounts,
+            on_switch=handle_switch_account,
+            on_delete=handle_delete_account,
+            on_refresh=handle_refresh_single_quota,
+            on_refresh_all=handle_refresh_quotas,
+            on_clear_all=handle_clear_all,
+            on_save_current=handle_save_account,
+            theme=tm
+        )
+    
+    def build_quota() -> QuotaDetailPage:
+        """Build the quota detail page."""
+        accounts_quota = {}
+        for email, quota in account_quotas.items():
+            if quota.models:
+                accounts_quota[email] = quota.models
+        
+        return QuotaDetailPage(
+            accounts_quota=accounts_quota,
+            on_preheat=handle_preheat_model,
+            on_refresh=handle_refresh_quotas,
+            theme=tm
+        )
+    
+    def build_notifications() -> NotificationsPage:
+        """Build the notifications page."""
+        return NotificationsPage(
+            notifications=notifications_list,
+            on_clear_all=lambda: notifications_list.clear(),
+            theme=tm
+        )
+    
+    def build_settings() -> SettingsPage:
+        """Build the settings page."""
+        effective_path, path_source = ProcessManager.get_effective_path()
+        
+        return SettingsPage(
+            antigravity_path=effective_path or "",
+            path_source=path_source,
+            on_save_path=handle_save_path,
+            on_browse_path=handle_browse_path,
+            on_preheat_all=handle_preheat_all,
+            theme=tm
+        )
+    
+    # === Event Handlers ===
+    def handle_nav_change(page_id: str):
+        """Handle sidebar navigation change."""
+        nonlocal current_page_id, dashboard_page, accounts_page, quota_page, notifications_page, settings_page
+        
+        current_page_id = page_id
+        
+        # Build and show appropriate page
+        if page_id == "dashboard":
+            dashboard_page = build_dashboard()
+            content_container.content = dashboard_page
+        elif page_id == "accounts":
+            accounts_page = build_accounts()
+            content_container.content = accounts_page
+        elif page_id == "quota":
+            quota_page = build_quota()
+            content_container.content = quota_page
+        elif page_id == "notifications":
+            notifications_page = build_notifications()
+            content_container.content = notifications_page
+        elif page_id == "settings":
+            settings_page = build_settings()
+            content_container.content = settings_page
+        
         page.update()
     
-    def add_notification(title: str, message: str, notif_type: str = "info"):
-        """Thêm thông báo vào danh sách trong app."""
-        from datetime import datetime
-        now = datetime.now().strftime("%H:%M:%S")
+    def handle_save_account():
+        """Handle save current account."""
+        success, msg = AccountManager.save_current_account()
+        if success:
+            toast_manager.success("Đã lưu", msg)
+        else:
+            toast_manager.danger("Lỗi", msg)
+        refresh_current_page()
+    
+    def handle_stop_app():
+        """Handle stop Antigravity app."""
+        killed = ProcessManager.kill_all()
+        if killed:
+            toast_manager.success("Đã dừng", f"Đã tắt {len(killed)} tiến trình")
+        else:
+            toast_manager.info("Thông báo", "Không có tiến trình nào đang chạy")
+        refresh_current_page()
+    
+    def handle_switch_account(email: str):
+        """Handle switch to account."""
+        # Check path first
+        effective_path, _ = ProcessManager.get_effective_path()
+        if not effective_path:
+            toast_manager.warning(
+                "Cấu hình thiếu",
+                "Vui lòng cấu hình đường dẫn Antigravity trong Cài đặt"
+            )
+            return
         
-        # Chọn màu theo loại thông báo
-        colors = {
-            "info": "blue",
-            "success": "green", 
-            "warning": "orange",
-            "reset": "purple"
-        }
-        bg_color = colors.get(notif_type, "blue")
+        toast_manager.info("Đang chuyển", f"Đang chuyển sang {email}...")
         
-        notif_card = ft.Container(
-            content=ft.Row([
-                ft.Icon(ft.Icons.NOTIFICATIONS, color=bg_color, size=20),
-                ft.Column([
-                    ft.Text(title, size=13, weight="bold", color=bg_color),
-                    ft.Text(message, size=11, color="grey300"),
-                    ft.Text(now, size=10, color="grey500"),
-                ], spacing=2, expand=True),
-                ft.IconButton(
-                    ft.Icons.CLOSE, 
-                    icon_size=14,
-                    on_click=lambda e, c=None: remove_notification(e, notif_card)
-                )
-            ], spacing=10),
-            bgcolor="grey900",
-            border_radius=8,
-            padding=10,
-            border=ft.border.all(1, bg_color)
+        # Kill current processes
+        ProcessManager.kill_all()
+        
+        # Switch account
+        success, msg = AccountManager.switch_to_account(email)
+        
+        if success:
+            # Start app
+            start_success, start_msg = ProcessManager.start_app()
+            if start_success:
+                toast_manager.success("Thành công", f"{msg}. {start_msg}")
+            else:
+                toast_manager.warning("Chuyển thành công", f"{msg}. Nhưng: {start_msg}")
+        else:
+            toast_manager.danger("Lỗi", msg)
+        
+        refresh_current_page()
+    
+    def handle_delete_account(email: str):
+        """Handle delete account."""
+        def confirm_delete():
+            success, msg = AccountManager.delete_account(email)
+            if success:
+                toast_manager.success("Đã xóa", msg)
+            else:
+                toast_manager.danger("Lỗi", msg)
+            refresh_current_page()
+        
+        dialog = ConfirmDialog(
+            title="Xóa tài khoản",
+            message=f"Bạn có chắc chắn muốn xóa tài khoản {email}?",
+            confirm_text="Xóa",
+            on_confirm=confirm_delete,
+            danger=True,
+            theme=tm
         )
-        
-        notification_list.controls.insert(0, notif_card)
-        notification_count.value = str(len(notification_list.controls))
-        
-        try:
-            page.update()
-        except:
-            pass
+        page.overlay.append(dialog)
+        dialog.open = True
+        page.update()
     
-    def remove_notification(e, card):
-        """Xóa một thông báo."""
-        if card in notification_list.controls:
-            notification_list.controls.remove(card)
-            notification_count.value = str(len(notification_list.controls))
-            page.update()
+    def handle_clear_all():
+        """Handle clear all accounts."""
+        def confirm_clear():
+            count, msg = AccountManager.clear_all_accounts()
+            toast_manager.info("Đã xóa", msg)
+            refresh_current_page()
+        
+        dialog = ConfirmDialog(
+            title="Xóa tất cả",
+            message="Bạn có chắc chắn muốn xóa tất cả tài khoản đã lưu?",
+            confirm_text="Xóa tất cả",
+            on_confirm=confirm_clear,
+            danger=True,
+            theme=tm
+        )
+        page.overlay.append(dialog)
+        dialog.open = True
+        page.update()
     
-    # Đăng ký callback cho NotificationService
-    notification_svc = NotificationService.get_instance()
-    notification_svc.set_ui_callback(add_notification)
-
-    async def handle_browse_path(e):
-        """Mở hộp thoại chọn file."""
-        # In Flet 0.80.x, FilePicker is a Service, not a Control
-        # Just create and use it directly without adding to overlay
+    def handle_refresh_quotas():
+        """Handle refresh all quotas."""
+        async def do_refresh():
+            nonlocal account_quotas
+            
+            toast_manager.info("Đang tải", "Đang làm mới quota...")
+            
+            accounts = AccountManager.list_accounts(include_state=True)
+            
+            for acc in accounts:
+                email = acc.get("email")
+                state = acc.get("state")
+                if state:
+                    try:
+                        quota = await QuotaService.get_account_quota(state)
+                        account_quotas[email] = quota
+                        
+                        # Update reset schedules
+                        if quota.models:
+                            for model in quota.models:
+                                if model.reset_text:
+                                    notification_svc.update_reset_schedule(
+                                        email=email,
+                                        model_id=model.model_id,
+                                        model_name=model.model_name,
+                                        reset_time_str=model.reset_text
+                                    )
+                    except Exception as e:
+                        print(f"Error fetching quota for {email}: {e}")
+            
+            notification_svc.clear_old_schedules()
+            
+            toast_manager.success("Hoàn tất", f"Đã cập nhật quota cho {len(accounts)} tài khoản")
+            refresh_current_page()
+        
+        # Run async in thread
+        def run_async():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(do_refresh())
+            loop.close()
+        
+        threading.Thread(target=run_async, daemon=True).start()
+    
+    def handle_refresh_single_quota(email: str):
+        """Handle refresh quota for single account."""
+        async def do_refresh():
+            accounts = AccountManager.list_accounts(include_state=True)
+            target = next((a for a in accounts if a.get("email") == email), None)
+            
+            if target and target.get("state"):
+                try:
+                    quota = await QuotaService.get_account_quota(target["state"])
+                    account_quotas[email] = quota
+                    toast_manager.success("Cập nhật", f"Đã cập nhật quota cho {email}")
+                except Exception as e:
+                    toast_manager.danger("Lỗi", str(e))
+            
+            refresh_current_page()
+        
+        def run_async():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(do_refresh())
+            loop.close()
+        
+        threading.Thread(target=run_async, daemon=True).start()
+    
+    def handle_preheat_model(email: str, model_id: str):
+        """Handle preheat single model."""
+        async def do_preheat():
+            accounts = AccountManager.list_accounts(include_state=True)
+            target = next((a for a in accounts if a.get("email") == email), None)
+            
+            if target and target.get("state"):
+                success = await QuotaService.trigger_model_preheat_by_state(target["state"], model_id)
+                if success:
+                    toast_manager.success("Preheat OK", f"Đã preheat {model_id}")
+                else:
+                    toast_manager.warning("Thất bại", f"Không thể preheat {model_id}")
+        
+        def run_async():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(do_preheat())
+            loop.close()
+        
+        threading.Thread(target=run_async, daemon=True).start()
+    
+    def handle_preheat_all():
+        """Handle preheat all models for all accounts."""
+        async def do_preheat_all():
+            accounts = AccountManager.list_accounts(include_state=True)
+            total_success = 0
+            total_failed = 0
+            
+            for acc in accounts:
+                email = acc.get("email", "Unknown")
+                state = acc.get("state")
+                if not state:
+                    continue
+                
+                add_notification("Đang Preheat", f"Tài khoản: {email}", "info")
+                
+                for model_id, model_name in QuotaService.TARGET_MODELS.items():
+                    try:
+                        success = await QuotaService.trigger_model_preheat_by_state(state, model_id)
+                        if success:
+                            total_success += 1
+                        else:
+                            total_failed += 1
+                    except:
+                        total_failed += 1
+            
+            add_notification(
+                "Preheat hoàn tất",
+                f"Thành công: {total_success}, Thất bại: {total_failed}",
+                "success" if total_failed == 0 else "warning"
+            )
+        
+        def run_async():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(do_preheat_all())
+            loop.close()
+        
+        toast_manager.info("Đang preheat", "Đang preheat tất cả models...")
+        threading.Thread(target=run_async, daemon=True).start()
+    
+    def handle_save_path(path: str):
+        """Handle save Antigravity path."""
+        import pathlib
+        if not path:
+            toast_manager.warning("Lỗi", "Vui lòng nhập đường dẫn")
+            return
+        
+        if not pathlib.Path(path).exists():
+            toast_manager.danger("Lỗi", f"Đường dẫn không tồn tại: {path}")
+            return
+        
+        set_antigravity_path(path)
+        toast_manager.success("Đã lưu", f"Đường dẫn: {path}")
+        
+        if settings_page:
+            settings_page.update_path(path, "saved")
+    
+    async def handle_browse_path():
+        """Handle browse for path."""
         file_picker = ft.FilePicker()
-        
-        # pick_files() is async and returns results directly
         result = await file_picker.pick_files(
             dialog_title="Chọn Antigravity.exe",
             allowed_extensions=["exe"],
@@ -146,460 +489,92 @@ def main(page: ft.Page):
         
         if result and len(result) > 0:
             selected_path = result[0].path
-            path_input.value = selected_path
-            page.update()
-
-    def handle_switch(e, email):
-        # Kiểm tra đường dẫn trước khi switch
-        effective_path, source = ProcessManager.get_effective_path()
-        if not effective_path:
-            page.snack_bar = ft.SnackBar(
-                ft.Text("⚠️ Không tìm thấy đường dẫn Antigravity. Vui lòng cấu hình trong phần Cài đặt bên dưới."),
-                bgcolor="orange",
-                duration=5000
-            )
-            page.snack_bar.open = True
-            page.update()
-            return
-        
-        page.snack_bar = ft.SnackBar(ft.Text(f"Đang chuyển sang {email}..."))
-        page.snack_bar.open = True
-        page.update()
-        
-        ProcessManager.kill_all()
-        success, msg = AccountManager.switch_to_account(email)
-        
-        if success:
-            # Khởi động lại ứng dụng
-            start_success, start_msg = ProcessManager.start_app()
-            if start_success:
-                page.snack_bar = ft.SnackBar(ft.Text(f"✅ {msg}. {start_msg}"), bgcolor="green")
-            else:
-                page.snack_bar = ft.SnackBar(ft.Text(f"⚠️ {msg}. Nhưng: {start_msg}"), bgcolor="orange")
-        else:
-            page.snack_bar = ft.SnackBar(ft.Text(f"❌ Lỗi: {msg}"), bgcolor="red")
-        
-        page.snack_bar.open = True
-        refresh_ui()
-
-    def handle_delete(e, email):
-        success, msg = AccountManager.delete_account(email)
-        page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor="green" if success else "red")
-        page.snack_bar.open = True
-        refresh_ui()
-
-    def handle_clear_all(e):
-        def close_dlg(e):
-            confirm_dlg.open = False
-            page.update()
-
-        def confirm_clear(e):
-            count, msg = AccountManager.clear_all_accounts()
-            page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor="blue")
-            page.snack_bar.open = True
-            confirm_dlg.open = False
-            refresh_ui()
-
-        confirm_dlg = ft.AlertDialog(
-            title=ft.Text("Xác nhận xóa sạch"),
-            content=ft.Text("Bạn có chắc chắn muốn xóa tất cả các bản sao lưu tài khoản không?"),
-            actions=[
-                ft.TextButton("Hủy", on_click=close_dlg),
-                ft.TextButton("Xóa tất cả", on_click=confirm_clear, color="red"),
-            ],
-        )
-        page.dialog = confirm_dlg
-        confirm_dlg.open = True
-        page.update()
-
-    def refresh_ui(e=None):
-        # 1. Update Status
-        is_running = ProcessManager.is_running()
-        status_indicator.content.value = "Đang chạy" if is_running else "Đã tắt"
-        status_indicator.bgcolor = "green" if is_running else "grey"
-        
-        # 2. Update Current Account
-        state = db.read_key(AGENT_STATE_KEY)
-        if state:
-            summary = AuthHandler.get_account_summary(state)
-            current_account_text.value = summary["email"]
-        else:
-            current_account_text.value = "Chưa đăng nhập"
-
-        # 3. Update Account List with Quota info
-        accounts = AccountManager.list_accounts()
-        account_list.controls.clear()
-        for acc in accounts:
-            email = acc["email"]
-            quota_info = account_quotas.get(email)
-            
-            # Create quota display widgets
-            quota_widgets = []
-            if quota_info and quota_info.models:
-                for model in quota_info.models:
-                    pct = model.percentage
-                    progress_color = "red" if pct < 15 else ("orange" if pct < 50 else "green")
-                    pct_display = f"{pct:.2f}%"
-                    reset_info = model.reset_text
-                    
-                    quota_widgets.append(
-                        ft.Container(
-                            content=ft.Column([
-                                ft.Row([
-                                    ft.Text(model.model_name, size=11, weight="w500"),
-                                    ft.Row([
-                                        ft.Text(reset_info, size=10, color="grey", italic=True) if reset_info else ft.Container(),
-                                        ft.Text(pct_display, size=11, color=progress_color, weight="bold"),
-                                    ], spacing=10),
-                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                                ft.ProgressBar(
-                                    value=pct / 100 if pct <= 100 else 1.0,
-                                    color=progress_color,
-                                    bgcolor="grey800",
-                                    height=6,
-                                ),
-                            ], spacing=2),
-                            padding=ft.padding.only(bottom=8),
-                        )
-                    )
-            elif quota_info and quota_info.error:
-                quota_widgets.append(ft.Text(f"⚠️ {quota_info.error}", color="orange", size=10))
-
-            # Create subtitle
-            subtitle_text = f"Gói: {acc['plan']}"
-            
-            # Create expandable account card
-            account_card = ft.ExpansionTile(
-                leading=ft.Icon(ft.Icons.PERSON, color="blue200"),
-                title=ft.Text(email, weight="bold"),
-                subtitle=ft.Text(subtitle_text, size=12, color="grey"),
-                trailing=ft.Row([
-                    ft.ElevatedButton("Switch", on_click=lambda e, em=email: handle_switch(e, em), height=32),
-                    ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color="red400", on_click=lambda e, em=email: handle_delete(e, em)),
-                ], tight=True, spacing=5),
-                controls=[
-                    ft.Container(
-                        content=ft.Column(
-                            quota_widgets if quota_widgets else [
-                                ft.Text("Nhấn 'Làm mới Quota' để xem hạn mức", size=12, color="grey", italic=True)
-                            ],
-                            spacing=5,
-                        ),
-                        padding=ft.padding.only(left=50, right=20, bottom=10),
-                    )
-                ],
-                expanded=False,
-            )
-            account_list.controls.append(account_card)
-        
-        # 4. Update path display
-        update_path_display()
-        
-        page.update()
-
-    def save_current(e):
-        success, msg = AccountManager.save_current_account()
-        page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor="green" if success else "red")
-        page.snack_bar.open = True
-        refresh_ui()
+            if settings_page:
+                settings_page.path_input.value = selected_path
+                settings_page.update()
     
-    async def refresh_quotas(e):
-        """Làm mới quota cho tất cả tài khoản."""
-        quota_loading.value = "⏳ Đang tải quota..."
-        page.update()
-        
-        notification_svc = NotificationService.get_instance()
-        
-        try:
-            # Get accounts with state data
-            accounts = AccountManager.list_accounts(include_state=True)
-            
-            # Fetch quotas for all accounts
-            for acc in accounts:
-                email = acc["email"]
-                state = acc.get("state")
-                if state:
-                    quota = await QuotaService.get_account_quota(state)
-                    account_quotas[email] = quota
-                    
-                    # Lưu thời gian reset để theo dõi thông báo
-                    if quota.models:
-                        for model in quota.models:
-                            if model.reset_text:
-                                notification_svc.update_reset_schedule(
-                                    email=email,
-                                    model_id=model.model_id,
-                                    model_name=model.model_name,
-                                    reset_time_str=model.reset_text
-                                )
-            
-            # Xóa các lịch cũ đã thông báo
-            notification_svc.clear_old_schedules()
-            
-            pending = len(notification_svc.get_pending_resets())
-            quota_loading.value = f"✅ Đã cập nhật quota ({len(accounts)} tài khoản, {pending} lịch reset)"
-            quota_loading.color = "green"
-        except Exception as ex:
-            quota_loading.value = f"❌ Lỗi: {str(ex)}"
-            quota_loading.color = "red"
-        
-        refresh_ui()
-
-    # --- UI Layout Reorganization ---
+    def refresh_current_page():
+        """Refresh the current page."""
+        handle_nav_change(current_page_id)
     
-    # 1. Accounts Tab Content
-    accounts_view = ft.Column([
-        ft.Card(
-            content=ft.Container(
-                content=ft.Column([
-                    ft.Text("Tài khoản hiện tại", size=14, color="grey"),
-                    current_account_text,
-                    ft.Row([
-                        ft.ElevatedButton("Sao lưu tài khoản này", icon=ft.Icons.SAVE, on_click=save_current),
-                        ft.OutlinedButton("Tắt Antigravity", icon=ft.Icons.STOP, on_click=lambda _: [ProcessManager.kill_all(), refresh_ui()])
-                    ])
-                ]),
-                padding=15
-            )
-        ),
+    # === Build Navigation Items ===
+    nav_items = [
+        NavItem(ft.Icons.DASHBOARD_OUTLINED, "Dashboard", "dashboard", ft.Icons.DASHBOARD),
+        NavItem(ft.Icons.PEOPLE_OUTLINE, "Tài khoản", "accounts", ft.Icons.PEOPLE),
+        NavItem(ft.Icons.ANALYTICS_OUTLINED, "Quota", "quota", ft.Icons.ANALYTICS),
+        NavItem(ft.Icons.NOTIFICATIONS_OUTLINED, "Thông báo", "notifications", ft.Icons.NOTIFICATIONS, badge_count=0),
+        NavItem(ft.Icons.SETTINGS_OUTLINED, "Cài đặt", "settings", ft.Icons.SETTINGS),
+    ]
+    
+    # === Build Sidebar ===
+    sidebar = Sidebar(
+        nav_items=nav_items,
+        on_nav_change=handle_nav_change,
+        selected_index=0,
+        theme=tm
+    )
+    
+    # === Content Container ===
+    content_container = ft.Container(
+        content=None,
+        expand=True,
+        bgcolor=tm.colors.background
+    )
+    
+    # === Toast Overlay Container ===
+    toast_overlay = ft.Container(
+        content=toast_container,
+        right=20,
+        top=20,
+        width=350,
+    )
+    
+    # === Main Layout ===
+    main_layout = ft.Stack([
         ft.Row([
-            ft.Text("Danh sách tài khoản", size=16, weight="bold", expand=True),
-            ft.ElevatedButton("Làm mới Quota", icon=ft.Icons.ANALYTICS, on_click=refresh_quotas, height=35),
-            ft.TextButton("Xóa tất cả", icon=ft.Icons.DELETE_SWEEP, icon_color="red400", on_click=handle_clear_all)
-        ], spacing=10),
-        quota_loading,
-        account_list,
-    ], expand=True)
-
-    # 2. Settings Tab Content
-    settings_view = ft.Column([
-        ft.Card(
-            content=ft.Container(
-                content=ft.Column([
-                    ft.Row([
-                        ft.Icon(ft.Icons.SETTINGS, color="blue200"),
-                        ft.Text("Cấu hình hệ thống", size=18, weight="bold"),
-                    ]),
-                    ft.Divider(),
-                    ft.Text("Đường dẫn ứng dụng Antigravity", size=14, weight="500"),
-                    ft.Text("Cần thiết để tự động khởi động lại ứng dụng khi chuyển tài khoản", size=12, color="grey"),
-                    ft.Row([
-                        path_input,
-                        ft.IconButton(ft.Icons.FOLDER_OPEN, tooltip="Chọn file", on_click=handle_browse_path),
-                        ft.ElevatedButton("Lưu đường dẫn", icon=ft.Icons.SAVE, on_click=handle_save_path),
-                    ]),
-                    path_status,
-                ]),
-                padding=20
-            )
-        ),
-        ft.Card(
-            content=ft.Container(
-                content=ft.Column([
-                    ft.Text("Thông tin phiên bản", size=14, weight="bold"),
-                    ft.Text("Antigravity Agent v2.0 (Python Rebuild)", size=12),
-                    ft.Text("Hỗ trợ: Real-time Quota, GMT+7 Timezone", size=12, color="grey"),
-                ]),
-                padding=20
-            )
-        ),
-        ft.Card(
-            content=ft.Container(
-                content=ft.Column([
-                    ft.Row([
-                        ft.Icon(ft.Icons.ROCKET_LAUNCH, color="orange"),
-                        ft.Text("Preheat tất cả Model", size=14, weight="bold"),
-                    ]),
-                    ft.Text("Gửi tin nhắn 'Hi' đến tất cả model để bắt đầu chu kỳ quota ngay lập tức.", size=12, color="grey"),
-                    preheat_status := ft.Text("", size=12, color="grey"),
-                    ft.ElevatedButton(
-                        "🔥 Preheat Ngay", 
-                        icon=ft.Icons.FLASH_ON,
-                        on_click=lambda e: trigger_preheat_all(e),
-                        bgcolor="orange",
-                        color="white"
-                    ),
-                ]),
-                padding=20
-            )
-        )
+            sidebar,
+            content_container
+        ], spacing=0, expand=True),
+        toast_overlay,
+        loading_overlay
     ])
     
-    async def do_preheat_all():
-        """Thực hiện preheat cho tất cả model."""
-        accounts = AccountManager.list_accounts(include_state=True)
-        if not accounts:
-            add_notification("Lỗi Preheat", "Không có tài khoản nào!", "warning")
-            return
-        
-        total_success = 0
-        total_failed = 0
-        
-        for acc in accounts:
-            email = acc.get("email", "Unknown")
-            state = acc.get("state")
-            if not state:
-                continue
-            
-            add_notification("Đang Preheat", f"Tài khoản: {email}", "info")
-            
-            # Preheat cho từng model
-            for model_id, model_name in QuotaService.TARGET_MODELS.items():
-                try:
-                    success = await QuotaService.trigger_model_preheat_by_state(state, model_id)
-                    if success:
-                        total_success += 1
-                        add_notification("Preheat OK", f"{model_name} - {email}", "success")
-                    else:
-                        total_failed += 1
-                except Exception as ex:
-                    total_failed += 1
-                    print(f"Preheat error: {ex}")
-        
-        add_notification(
-            "Preheat Hoàn tất", 
-            f"Thành công: {total_success}, Thất bại: {total_failed}",
-            "success" if total_failed == 0 else "warning"
-        )
+    page.add(main_layout)
     
-    def trigger_preheat_all(e):
-        """Trigger preheat từ nút bấm."""
-        import asyncio
-        
-        preheat_status.value = "⏳ Đang thực hiện preheat..."
-        page.update()
-        
-        # Chạy async trong thread riêng
-        def run_async():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(do_preheat_all())
-            loop.close()
-            
-            preheat_status.value = "✅ Hoàn tất!"
-            try:
-                page.update()
-            except:
-                pass
-        
-        import threading
-        threading.Thread(target=run_async, daemon=True).start()
-        
-        page.snack_bar = ft.SnackBar(ft.Text("Đang preheat tất cả model... Kiểm tra tab Thông báo."), bgcolor="orange")
-        page.snack_bar.open = True
-        page.update()
+    # === Initialize ===
+    # Build initial page
+    dashboard_page = build_dashboard()
+    content_container.content = dashboard_page
+    page.update()
+    
+    # Start notification monitor
+    notification_svc.start_monitor(interval_seconds=60)
+    
+    # === Keyboard Shortcuts ===
+    def handle_keyboard(e: ft.KeyboardEvent):
+        if e.ctrl:
+            if e.key == "1":
+                handle_nav_change("dashboard")
+                sidebar.set_selected(0)
+            elif e.key == "2":
+                handle_nav_change("accounts")
+                sidebar.set_selected(1)
+            elif e.key == "3":
+                handle_nav_change("quota")
+                sidebar.set_selected(2)
+            elif e.key == "4":
+                handle_nav_change("notifications")
+                sidebar.set_selected(3)
+            elif e.key == "5":
+                handle_nav_change("settings")
+                sidebar.set_selected(4)
+            elif e.key == "R":
+                handle_refresh_quotas()
+            elif e.key == "S":
+                handle_save_account()
+    
+    page.on_keyboard_event = handle_keyboard
 
-    # --- Content Container ---
-    content_container = ft.Container(content=accounts_view, expand=True)
-
-    def switch_tab(tab_index):
-        # Reset all button styles
-        btn_accounts.style = ft.ButtonStyle(color="grey", bgcolor="transparent")
-        btn_settings.style = ft.ButtonStyle(color="grey", bgcolor="transparent")
-        btn_notifications.style = ft.ButtonStyle(color="grey", bgcolor="transparent")
-        
-        if tab_index == 0:
-            content_container.content = accounts_view
-            btn_accounts.style = ft.ButtonStyle(color="blue200", bgcolor="grey900")
-        elif tab_index == 1:
-            content_container.content = settings_view
-            btn_settings.style = ft.ButtonStyle(color="blue200", bgcolor="grey900")
-        else:
-            content_container.content = notifications_view
-            btn_notifications.style = ft.ButtonStyle(color="blue200", bgcolor="grey900")
-        page.update()
-
-    # --- Custom Tab Buttons ---
-    btn_accounts = ft.TextButton(
-        content=ft.Row([ft.Icon(ft.Icons.PEOPLE_OUTLINE, size=16), ft.Text("Tài khoản", size=13)], spacing=8),
-        style=ft.ButtonStyle(color="blue200", bgcolor="grey900"),
-        on_click=lambda _: switch_tab(0),
-        width=130,
-        height=35
-    )
-    
-    btn_settings = ft.TextButton(
-        content=ft.Row([ft.Icon(ft.Icons.SETTINGS_OUTLINED, size=16), ft.Text("Cài đặt", size=13)], spacing=8),
-        style=ft.ButtonStyle(color="grey", bgcolor="transparent"),
-        on_click=lambda _: switch_tab(1),
-        width=130,
-        height=35
-    )
-    
-    btn_notifications = ft.TextButton(
-        content=ft.Row([
-            ft.Icon(ft.Icons.NOTIFICATIONS_OUTLINED, size=16), 
-            ft.Text("Thông báo", size=13),
-            ft.Container(
-                content=notification_count,
-                bgcolor="red",
-                border_radius=10,
-                padding=ft.padding.symmetric(horizontal=6, vertical=2)
-            )
-        ], spacing=6),
-        style=ft.ButtonStyle(color="grey", bgcolor="transparent"),
-        on_click=lambda _: switch_tab(2),
-        width=150,
-        height=35
-    )
-    
-    # Notifications View
-    notifications_view = ft.Column([
-        ft.Card(
-            content=ft.Container(
-                content=ft.Column([
-                    ft.Row([
-                        ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE, color="purple"),
-                        ft.Text("Lịch sử thông báo", size=16, weight="bold"),
-                        ft.Container(expand=True),
-                        ft.TextButton("Xóa tất cả", icon=ft.Icons.DELETE_SWEEP, 
-                                      on_click=lambda e: clear_all_notifications())
-                    ]),
-                    ft.Divider(),
-                    ft.Container(
-                        content=notification_list,
-                        height=400,
-                        border=ft.border.all(1, "grey800"),
-                        border_radius=8
-                    )
-                ]),
-                padding=15
-            )
-        )
-    ])
-    
-    def clear_all_notifications():
-        notification_list.controls.clear()
-        notification_count.value = "0"
-        page.update()
-
-    tab_row = ft.Container(
-        content=ft.Row([btn_accounts, btn_settings, btn_notifications], spacing=0),
-        bgcolor="black",
-        border_radius=8,
-        padding=2
-    )
-
-    page.add(
-        ft.Row([
-            ft.Image(src="icon.png", width=30, height=30, border_radius=5), 
-            ft.Text("Antigravity Agent", size=20, weight="bold"),
-            ft.VerticalDivider(width=20, color="transparent"), # Khoảng cách nhỏ
-            tab_row,
-            ft.Container(expand=True), # Đẩy các phần tử còn lại sang phải
-            status_indicator,
-            ft.IconButton(ft.Icons.REFRESH, on_click=refresh_ui, tooltip="Làm mới trạng thái", icon_size=18)
-        ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        ft.Divider(height=1, color="grey700"),
-        content_container
-    )
-    
-    refresh_ui()
-    
-    # Khởi động monitor thông báo reset
-    notification_svc = NotificationService.get_instance()
-    notification_svc.start_monitor(interval_seconds=60)  # Kiểm tra mỗi 60 giây
 
 if __name__ == "__main__":
-    ft.app(target=main)
-
+    ft.app(target=main, assets_dir="assets")

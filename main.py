@@ -15,4 +15,4 @@ if __name__ == "__main__":
         print(f"ERROR: Could not start API Server: {e}")
 
     # 2. Khởi động Giao diện người dùng
-    ft.app(target=ui_main, assets_dir="assets")
+    ft.app(ui_main, assets_dir="assets")
