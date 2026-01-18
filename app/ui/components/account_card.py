@@ -180,7 +180,7 @@ class AccountCard(ft.Container):
                 )
             ),
             ft.ElevatedButton(
-                text="Switch",
+                "Switch",
                 icon=ft.Icons.SWAP_HORIZ,
                 bgcolor=colors.primary,
                 color=colors.on_primary,
@@ -196,13 +196,17 @@ class AccountCard(ft.Container):
                 icon_size=18,
                 items=[
                     ft.PopupMenuItem(
-                        text="Xem chi tiết",
-                        icon=ft.Icons.INFO_OUTLINE,
+                        content=ft.Row([
+                            ft.Icon(ft.Icons.INFO_OUTLINE, size=16, color=colors.text_secondary),
+                            ft.Text("Xem chi tiết", color=colors.text_primary)
+                        ], spacing=Spacing.SM),
                         on_click=lambda e: self._toggle_expand()
                     ),
                     ft.PopupMenuItem(
-                        text="Xóa tài khoản",
-                        icon=ft.Icons.DELETE_OUTLINE,
+                        content=ft.Row([
+                            ft.Icon(ft.Icons.DELETE_OUTLINE, size=16, color=colors.danger),
+                            ft.Text("Xóa tài khoản", color=colors.text_primary)
+                        ], spacing=Spacing.SM),
                         on_click=lambda e: self.on_delete(self.email) if self.on_delete else None
                     )
                 ]

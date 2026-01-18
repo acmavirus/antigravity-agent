@@ -149,7 +149,7 @@ class QuotaDetailPage(ft.Container):
             )
         ], spacing=Spacing.MD)
         
-        # Quota cards grid
+        # Quota cards in a scrollable grid
         quota_cards = []
         for q in quotas:
             model_id = q.model_id if hasattr(q, 'model_id') else q.get("model_id", "")
@@ -167,12 +167,13 @@ class QuotaDetailPage(ft.Container):
             )
             quota_cards.append(card)
         
-        # Grid layout for cards
+        # Use Row with wrap for responsive grid
         grid_row = ft.Row(
             controls=quota_cards,
             wrap=True,
             spacing=Spacing.MD,
-            run_spacing=Spacing.MD
+            run_spacing=Spacing.MD,
+            scroll=ft.ScrollMode.AUTO
         )
         
         return ft.Container(
@@ -180,7 +181,7 @@ class QuotaDetailPage(ft.Container):
                 account_header,
                 ft.Divider(height=1, color=colors.divider),
                 grid_row
-            ], spacing=Spacing.MD),
+            ], spacing=Spacing.MD, scroll=ft.ScrollMode.AUTO),
             bgcolor=colors.card,
             border=ft.border.all(1, colors.border),
             border_radius=Spacing.RADIUS_LG,

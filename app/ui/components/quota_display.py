@@ -5,7 +5,10 @@ Circular progress and mini bar visualizations
 import flet as ft
 import math
 from typing import Optional
-from app.ui.theme import ThemeManager, Spacing, Typography, AnimationDuration
+from app.ui.theme import (
+    ThemeManager, Spacing, Typography, AnimationDuration,
+    QuotaColors, GlowEffects, Gradients, create_glass_card
+)
 
 
 class QuotaCircle(ft.Container):
@@ -33,12 +36,7 @@ class QuotaCircle(ft.Container):
     
     def _get_color(self) -> str:
         """Get color based on percentage."""
-        colors = self.tm.colors
-        if self.percentage < 15:
-            return colors.danger
-        elif self.percentage < 50:
-            return colors.warning
-        return colors.success
+        return QuotaColors.get_color(self.percentage)
     
     def _build(self):
         """Build the circular progress indicator."""
@@ -127,12 +125,7 @@ class QuotaMiniBars(ft.Container):
     
     def _get_color(self, percentage: float) -> str:
         """Get color based on percentage."""
-        colors = self.tm.colors
-        if percentage < 15:
-            return colors.danger
-        elif percentage < 50:
-            return colors.warning
-        return colors.success
+        return QuotaColors.get_color(percentage)
     
     def _build(self):
         """Build the mini bars display."""
@@ -236,93 +229,135 @@ class QuotaCard(ft.Container):
         return "Tốt"
     
     def _build(self):
-        """Build the quota card."""
+        """Build the quota card with premium glassmorphism design."""
         colors = self.tm.colors
-        progress_color = self._get_color()
+        quota_color = QuotaColors.get_color(self.percentage)
+        quota_gradient = QuotaColors.get_gradient(self.percentage)
         
         # Model icon mapping
         icon_map = {
-            "gemini": ft.Icons.AUTO_AWESOME,
-            "claude": ft.Icons.PSYCHOLOGY,
-            "gpt": ft.Icons.SMART_TOY
+            "gemini": "🤖",
+            "claude": "🧠", 
+            "gpt": "🎯"
         }
-        model_icon = ft.Icons.AUTO_AWESOME
-        for key, icon in icon_map.items():
+        model_emoji = "⚡"
+        for key, emoji in icon_map.items():
             if key in self.model_id.lower():
-                model_icon = icon
+                model_emoji = emoji
                 break
         
-        # Header
+        # Status badge
+        status_configs = {
+            "critical": ("⚠️ Sắp hết", QuotaColors.CRITICAL),
+            "low": ("⚡ Thấp", QuotaColors.LOW),
+            "medium": ("📊 Trung bình", QuotaColors.MEDIUM),
+            "high": ("✅ Tốt", QuotaColors.HIGH)
+        }
+        
+        if self.percentage <= 20:
+            status_text, status_color = status_configs["critical"]
+        elif self.percentage <= 50:
+            status_text, status_color = status_configs["low"]
+        elif self.percentage <= 80:
+            status_text, status_color = status_configs["medium"]
+        else:
+            status_text, status_color = status_configs["high"]
+        
+        # Header with model name and percentage
         header = ft.Row([
-            ft.Container(
-                content=ft.Icon(model_icon, color=colors.on_primary, size=20),
-                width=36,
-                height=36,
-                border_radius=Spacing.RADIUS_MD,
-                bgcolor=progress_color,
-                alignment=ft.Alignment(0, 0)
+            ft.Text(
+                model_emoji,
+                size=28,
             ),
             ft.Column([
                 ft.Text(
                     self.model_name,
-                    size=Typography.BODY,
+                    size=Typography.SUBTITLE,
                     weight=Typography.SEMI_BOLD,
                     color=colors.text_primary
                 ),
-                ft.Text(
-                    self._get_status_text(),
-                    size=Typography.CAPTION,
-                    color=progress_color
+                ft.Container(
+                    content=ft.Text(
+                        status_text,
+                        size=Typography.SMALL,
+                        color=colors.on_primary,
+                        weight=Typography.MEDIUM
+                    ),
+                    bgcolor=status_color,
+                    border_radius=Spacing.RADIUS_FULL,
+                    padding=ft.padding.symmetric(horizontal=8, vertical=2)
                 )
-            ], spacing=0, expand=True),
+            ], spacing=4, expand=True),
             ft.Text(
-                f"{self.percentage:.1f}%",
-                size=Typography.TITLE,
+                f"{self.percentage:.0f}%",
+                size=32,  # Larger percentage
                 weight=Typography.BOLD,
-                color=progress_color
+                color=quota_color
             )
-        ], spacing=Spacing.MD)
+        ], spacing=Spacing.MD, alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
         
-        # Progress bar
-        progress = ft.ProgressBar(
-            value=self.percentage / 100 if self.percentage <= 100 else 1.0,
-            color=progress_color,
-            bgcolor=colors.surface_variant,
-            height=8,
-            border_radius=4
+        # Progress bar using ProgressBar for better compatibility
+        progress_container = ft.Container(
+            content=ft.ProgressBar(
+                value=self.percentage / 100 if self.percentage <= 100 else 1.0,
+                color=quota_color,
+                bgcolor=colors.surface_variant,
+                height=12,
+                border_radius=6
+            ),
+            margin=ft.margin.symmetric(vertical=Spacing.SM)
         )
         
-        # Footer
-        footer = ft.Row([
+        # Footer with reset time and preheat button
+        footer_items = [
             ft.Row([
-                ft.Icon(ft.Icons.SCHEDULE, color=colors.text_muted, size=14),
+                ft.Icon(ft.Icons.SCHEDULE, color=colors.text_muted, size=16),
                 ft.Text(
                     f"Reset: {self.reset_text}" if self.reset_text else "No reset info",
                     size=Typography.CAPTION,
-                    color=colors.text_muted
+                    color=colors.text_secondary
                 )
-            ], spacing=4),
-            ft.Container(expand=True),
-            ft.TextButton(
-                text="Preheat",
-                icon=ft.Icons.FLASH_ON,
-                on_click=lambda e: self.on_preheat(self.model_id) if self.on_preheat else None,
-                style=ft.ButtonStyle(
-                    color=colors.warning,
-                    overlay_color=ft.Colors.with_opacity(0.1, colors.warning)
+            ], spacing=6)
+        ]
+        
+        if self.on_preheat and self.percentage < 100:
+            footer_items.append(ft.Container(expand=True))
+            footer_items.append(
+                ft.ElevatedButton(
+                    text="Preheat",
+                    icon=ft.Icons.FLASH_ON,
+                    on_click=lambda e: self.on_preheat(self.model_id),
+                    bgcolor=colors.warning,
+                    color=colors.on_primary,
+                    style=ft.ButtonStyle(
+                        shape=ft.RoundedRectangleBorder(radius=Spacing.RADIUS_MD)
+                    )
                 )
-            ) if self.on_preheat and self.percentage < 100 else ft.Container()
-        ])
+            )
+        
+        footer = ft.Row(footer_items, alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
         
         # Build content
         self.content = ft.Column([
             header,
-            progress,
+            progress_container,
             footer
         ], spacing=Spacing.MD)
         
-        self.bgcolor = colors.card
-        self.border = ft.border.all(1, colors.border)
+        # Apply glassmorphism with glow based on quota level
+        self.bgcolor = ft.Colors.with_opacity(0.8, colors.card)
+        self.border = ft.border.all(1.5, quota_color if self.percentage <= 20 else colors.border)
         self.border_radius = Spacing.RADIUS_LG
         self.padding = Spacing.LG
-        self.animate = AnimationDuration.FAST
+        self.width = 320  # Fixed width for consistent grid layout
+        
+        # Add glow for critical quota
+        if self.percentage <= 20:
+            self.shadow = [
+                GlowEffects.create_elevation(3),
+                GlowEffects.create_glow(QuotaColors.CRITICAL, intensity=0.3, blur=20)
+            ]
+        else:
+            self.shadow = [GlowEffects.create_elevation(2)]
+        
+        self.animate = AnimationDuration.NORMAL

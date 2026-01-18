@@ -1,6 +1,6 @@
 """
 Sidebar Navigation Component
-Modern sidebar with icons, tooltips, and active state
+Compact sidebar using NavigationRail for proper layout
 """
 import flet as ft
 from typing import Callable, List, Optional
@@ -25,7 +25,7 @@ class NavItem:
 
 
 class Sidebar(ft.Container):
-    """Modern sidebar navigation component."""
+    """Compact sidebar navigation using custom layout."""
     
     def __init__(
         self,
@@ -49,136 +49,90 @@ class Sidebar(ft.Container):
         """Build the sidebar UI."""
         colors = self.tm.colors
         
-        # Logo section
-        logo_section = ft.Container(
+        # Logo - just icon when collapsed
+        logo = ft.Container(
             content=ft.Row([
                 ft.Container(
-                    content=ft.Image(
-                        src="icon.png",
-                        width=32,
-                        height=32,
-                        border_radius=Spacing.RADIUS_MD
-                    ),
+                    content=ft.Icon(ft.Icons.ROCKET_LAUNCH, color=ft.Colors.WHITE, size=18),
+                    width=32,
+                    height=32,
+                    border_radius=8,
                     gradient=Gradients.linear(Gradients.BLUE_PURPLE),
-                    border_radius=Spacing.RADIUS_MD,
-                    padding=2
+                    alignment=ft.Alignment(0, 0)
                 ),
                 ft.Text(
-                    "Antigravity",
-                    size=Typography.SUBTITLE,
-                    weight=Typography.SEMI_BOLD,
+                    "Agent",
+                    size=12,
+                    weight=ft.FontWeight.BOLD,
                     color=colors.text_primary
                 ) if not self._collapsed else ft.Container()
-            ], spacing=Spacing.SM),
-            padding=ft.padding.symmetric(horizontal=Spacing.LG, vertical=Spacing.XL),
+            ], spacing=6, tight=True),
+            padding=ft.padding.symmetric(horizontal=8, vertical=12)
         )
         
-        # Navigation items
+        # Navigation buttons - simple vertical list
         nav_buttons = []
         for i, item in enumerate(self.nav_items):
-            nav_buttons.append(
-                self._create_nav_button(item, i)
+            is_selected = i == self.selected_index
+            
+            btn = ft.Container(
+                content=ft.Row([
+                    ft.Icon(
+                        item.icon_selected if is_selected else item.icon,
+                        color=colors.primary if is_selected else colors.text_muted,
+                        size=18
+                    ),
+                    ft.Text(
+                        item.label,
+                        size=11,
+                        color=colors.primary if is_selected else colors.text_secondary,
+                        weight=ft.FontWeight.W_500 if is_selected else ft.FontWeight.NORMAL
+                    ) if not self._collapsed else ft.Container()
+                ], spacing=8, tight=True),
+                padding=ft.padding.symmetric(horizontal=10, vertical=8),
+                border_radius=6,
+                bgcolor=ft.Colors.with_opacity(0.12, colors.primary) if is_selected else None,
+                on_click=lambda e, idx=i: self._handle_nav_click(idx),
+                ink=True
             )
+            nav_buttons.append(btn)
         
-        nav_section = ft.Column(
-            controls=nav_buttons,
-            spacing=Spacing.XS,
-            expand=True
-        )
-        
-        # Theme toggle at bottom
-        theme_toggle = ft.Container(
+        # Theme toggle - compact
+        theme_btn = ft.Container(
             content=ft.Row([
-                ft.IconButton(
-                    icon=ft.Icons.DARK_MODE if self.tm.is_dark else ft.Icons.LIGHT_MODE,
-                    icon_color=colors.text_secondary,
-                    tooltip="Toggle Theme",
-                    on_click=self._handle_theme_toggle,
-                    icon_size=20
+                ft.Icon(
+                    ft.Icons.DARK_MODE if self.tm.is_dark else ft.Icons.LIGHT_MODE,
+                    color=colors.text_muted,
+                    size=18
                 ),
                 ft.Text(
-                    "Dark Mode" if self.tm.is_dark else "Light Mode",
-                    size=Typography.CAPTION,
+                    "Dark" if self.tm.is_dark else "Light",
+                    size=10,
                     color=colors.text_muted
                 ) if not self._collapsed else ft.Container()
-            ], spacing=Spacing.SM),
-            padding=ft.padding.all(Spacing.MD)
+            ], spacing=8, tight=True),
+            padding=ft.padding.symmetric(horizontal=10, vertical=8),
+            on_click=self._handle_theme_toggle,
+            ink=True
         )
         
-        # Main sidebar container
+        # Build sidebar content
         self.content = ft.Column([
-            logo_section,
+            logo,
+            ft.Container(height=8),
+            # Nav items in a column
+            ft.Column(nav_buttons, spacing=2),
+            ft.Container(expand=True),  # Spacer
             ft.Divider(height=1, color=colors.divider),
-            ft.Container(
-                content=nav_section,
-                expand=True,
-                padding=ft.padding.symmetric(horizontal=Spacing.SM, vertical=Spacing.MD)
-            ),
-            ft.Divider(height=1, color=colors.divider),
-            theme_toggle
-        ])
+            theme_btn,
+            ft.Container(height=4)
+        ], spacing=0)
         
-        self.width = 220 if not self._collapsed else 70
+        # Sidebar container properties
+        self.width = 120 if not self._collapsed else 50
         self.bgcolor = colors.surface
         self.border = ft.border.only(right=ft.BorderSide(1, colors.border))
-        self.animate = AnimationDuration.NORMAL
-    
-    def _create_nav_button(self, item: NavItem, index: int) -> ft.Container:
-        """Create a navigation button."""
-        colors = self.tm.colors
-        is_selected = index == self.selected_index
-        
-        icon_widget = ft.Icon(
-            item.icon_selected if is_selected else item.icon,
-            color=colors.primary if is_selected else colors.text_secondary,
-            size=20
-        )
-        
-        # Badge for notification count
-        badge = None
-        if item.badge_count > 0:
-            badge = ft.Container(
-                content=ft.Text(
-                    str(item.badge_count) if item.badge_count < 100 else "99+",
-                    size=10,
-                    color=colors.on_primary,
-                    weight=Typography.SEMI_BOLD
-                ),
-                bgcolor=colors.danger,
-                border_radius=Spacing.RADIUS_FULL,
-                padding=ft.padding.symmetric(horizontal=5, vertical=1),
-                alignment=ft.Alignment(0, 0)
-            )
-        
-        content = ft.Row([
-            ft.Stack([
-                icon_widget,
-                ft.Container(
-                    content=badge,
-                    top=-5,
-                    right=-8
-                ) if badge else ft.Container(width=0, height=0)
-            ]),
-            ft.Text(
-                item.label,
-                size=Typography.BODY,
-                weight=Typography.MEDIUM if is_selected else Typography.REGULAR,
-                color=colors.primary if is_selected else colors.text_secondary
-            ) if not self._collapsed else ft.Container()
-        ], spacing=Spacing.MD)
-        
-        return ft.Container(
-            content=content,
-            padding=ft.padding.symmetric(horizontal=Spacing.MD, vertical=Spacing.SM + 2),
-            border_radius=Spacing.RADIUS_MD,
-            bgcolor=ft.Colors.with_opacity(0.1, colors.primary) if is_selected else None,
-            border=ft.border.all(1, colors.primary) if is_selected else None,
-            on_click=lambda e, idx=index: self._handle_nav_click(idx),
-            on_hover=lambda e: self._handle_hover(e),
-            ink=True,
-            animate=AnimationDuration.FAST,
-            tooltip=item.label if self._collapsed else None
-        )
+        self.padding = 0
     
     def _handle_nav_click(self, index: int):
         """Handle navigation item click."""
@@ -188,12 +142,6 @@ class Sidebar(ft.Container):
             if self.on_nav_change:
                 self.on_nav_change(self.nav_items[index].page_id)
             self.update()
-    
-    def _handle_hover(self, e: ft.ControlEvent):
-        """Handle hover effect."""
-        colors = self.tm.colors
-        e.control.bgcolor = ft.Colors.with_opacity(0.05, colors.primary) if e.data == "true" else None
-        e.control.update()
     
     def _handle_theme_toggle(self, e):
         """Handle theme toggle."""

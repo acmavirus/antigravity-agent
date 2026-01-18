@@ -25,7 +25,8 @@ class NotificationsPage(ft.Container):
         self.on_dismiss = on_dismiss
         self.tm = theme or ThemeManager.get_instance()
         
-        self._filter = "all"  # all, reset, warning, info
+        self._filter = "all"  # all, reset, warning, info, success, danger
+        self._time_filter = "all_time"  # all_time, today, week, month
         self._build()
     
     def _build(self):
@@ -56,18 +57,26 @@ class NotificationsPage(ft.Container):
             ) if self.notifications else ft.Container()
         ])
         
-        # Filter tabs
-        filter_tabs = ft.Row([
+        # Filter tabs - Type filters
+        type_filter_tabs = ft.Row([
             self._build_filter_chip("all", "Tất cả", len(self.notifications)),
             self._build_filter_chip("reset", "Reset", len([n for n in self.notifications if n.get("type") == "reset"])),
             self._build_filter_chip("warning", "Cảnh báo", len([n for n in self.notifications if n.get("type") == "warning"])),
             self._build_filter_chip("success", "Thành công", len([n for n in self.notifications if n.get("type") == "success"])),
+            self._build_filter_chip("danger", "Lỗi", len([n for n in self.notifications if n.get("type") == "danger"])),
+        ], spacing=Spacing.SM, wrap=True)
+        
+        # Time-based filters
+        time_filter_tabs = ft.Row([
+            ft.Text("Thời gian:", size=Typography.CAPTION, color=colors.text_muted, weight=Typography.SEMI_BOLD),
+            self._build_time_filter_chip("all_time", "Tất cả"),
+            self._build_time_filter_chip("today", "Hôm nay"),
+            self._build_time_filter_chip("week", "Tuần này"),
+            self._build_time_filter_chip("month", "Tháng này"),
         ], spacing=Spacing.SM)
         
         # Filter notifications
-        filtered = self.notifications
-        if self._filter != "all":
-            filtered = [n for n in self.notifications if n.get("type") == self._filter]
+        filtered = self._apply_filters(self.notifications)
         
         # Notification list
         if not filtered:
@@ -118,9 +127,11 @@ class NotificationsPage(ft.Container):
         self.content = ft.Column([
             header,
             ft.Container(height=Spacing.MD),
-            filter_tabs,
+            type_filter_tabs,
+            ft.Container(height=Spacing.XS),
+            time_filter_tabs,
             content
-        ], spacing=0, expand=True)
+        ], spacing=0, expand=True, scroll=ft.ScrollMode.AUTO)
         
         self.expand = True
         self.padding = Spacing.XL
@@ -147,6 +158,50 @@ class NotificationsPage(ft.Container):
             on_click=lambda e, f=filter_id: self._handle_filter(f),
             ink=True
         )
+    
+    def _build_time_filter_chip(self, filter_id: str, label: str) -> ft.Container:
+        """Build a time filter chip."""
+        colors = self.tm.colors
+        is_selected = self._time_filter == filter_id
+        
+        return ft.Container(
+            content=ft.Text(label, size=Typography.CAPTION, color=colors.on_primary if is_selected else colors.text_secondary),
+            bgcolor=colors.accent if is_selected else None,
+            border=ft.border.all(1, colors.accent if is_selected else colors.border),
+            border_radius=Spacing.RADIUS_FULL,
+            padding=ft.padding.symmetric(horizontal=Spacing.MD, vertical=Spacing.XS),
+            on_click=lambda e, f=filter_id: self._handle_time_filter(f),
+            ink=True
+        )
+    
+    def _apply_filters(self, notifications: list) -> list:
+        """Apply both type and time filters."""
+        from datetime import datetime, timedelta
+        
+        filtered = notifications
+        
+        # Apply type filter
+        if self._filter != "all":
+            filtered = [n for n in filtered if n.get("type") == self._filter]
+        
+        # Apply time filter
+        if self._time_filter != "all_time":
+            now = datetime.now()
+            
+            if self._time_filter == "today":
+                start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                filtered = [n for n in filtered if isinstance(n.get("timestamp"), datetime) and n["timestamp"] >= start_of_day]
+            
+            elif self._time_filter == "week":
+                start_of_week = now - timedelta(days=now.weekday())
+                start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
+                filtered = [n for n in filtered if isinstance(n.get("timestamp"), datetime) and n["timestamp"] >= start_of_week]
+            
+            elif self._time_filter == "month":
+                start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                filtered = [n for n in filtered if isinstance(n.get("timestamp"), datetime) and n["timestamp"] >= start_of_month]
+        
+        return filtered
     
     def _build_notification_card(self, notif: dict) -> ft.Container:
         """Build a notification card."""
@@ -242,6 +297,12 @@ class NotificationsPage(ft.Container):
     def _handle_filter(self, filter_id: str):
         """Handle filter change."""
         self._filter = filter_id
+        self._build()
+        self.update()
+    
+    def _handle_time_filter(self, filter_id: str):
+        """Handle time filter change."""
+        self._time_filter = filter_id
         self._build()
         self.update()
     

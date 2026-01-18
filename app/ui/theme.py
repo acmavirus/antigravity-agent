@@ -127,6 +127,7 @@ class ThemeManager:
         self._is_dark = True
         self._colors = DARK_THEME
         self._page: Optional[ft.Page] = None
+        self._on_theme_change_callbacks: list = []
     
     @classmethod
     def get_instance(cls) -> 'ThemeManager':
@@ -137,6 +138,16 @@ class ThemeManager:
     def set_page(self, page: ft.Page):
         """Set the page reference for theme updates."""
         self._page = page
+    
+    def add_theme_change_callback(self, callback):
+        """Add a callback to be called when theme changes."""
+        if callback not in self._on_theme_change_callbacks:
+            self._on_theme_change_callbacks.append(callback)
+    
+    def remove_theme_change_callback(self, callback):
+        """Remove a theme change callback."""
+        if callback in self._on_theme_change_callbacks:
+            self._on_theme_change_callbacks.remove(callback)
     
     @property
     def is_dark(self) -> bool:
@@ -153,6 +164,13 @@ class ThemeManager:
         if self._page:
             self._page.theme_mode = ft.ThemeMode.DARK if self._is_dark else ft.ThemeMode.LIGHT
             self._page.bgcolor = self._colors.background
+        # Notify all callbacks
+        for callback in self._on_theme_change_callbacks:
+            try:
+                callback()
+            except Exception as e:
+                print(f"Theme callback error: {e}")
+        if self._page:
             self._page.update()
     
     def set_dark_mode(self, is_dark: bool):
@@ -162,6 +180,13 @@ class ThemeManager:
         if self._page:
             self._page.theme_mode = ft.ThemeMode.DARK if is_dark else ft.ThemeMode.LIGHT
             self._page.bgcolor = self._colors.background
+        # Notify all callbacks
+        for callback in self._on_theme_change_callbacks:
+            try:
+                callback()
+            except Exception as e:
+                print(f"Theme callback error: {e}")
+        if self._page:
             self._page.update()
 
 
@@ -252,6 +277,72 @@ class AnimationDuration:
     VERY_SLOW = 800
 
 
+# Quota Color System
+class QuotaColors:
+    """Semantic colors for quota levels."""
+    
+    # Quota level colors (percentage-based)
+    CRITICAL = "#f85149"      # 0-20%: Red
+    LOW = "#d29922"           # 21-50%: Orange/Yellow
+    MEDIUM = "#58a6ff"        # 51-80%: Blue
+    HIGH = "#3fb950"          # 81-100%: Green
+    
+    # Gradients for quota levels
+    CRITICAL_GRADIENT = ["#da3633", "#f85149"]
+    LOW_GRADIENT = ["#9e6a03", "#d29922"]
+    MEDIUM_GRADIENT = ["#388bfd", "#58a6ff"]
+    HIGH_GRADIENT = ["#238636", "#3fb950"]
+    
+    @staticmethod
+    def get_color(percentage: float) -> str:
+        """Get color based on quota percentage."""
+        if percentage <= 20:
+            return QuotaColors.CRITICAL
+        elif percentage <= 50:
+            return QuotaColors.LOW
+        elif percentage <= 80:
+            return QuotaColors.MEDIUM
+        else:
+            return QuotaColors.HIGH
+    
+    @staticmethod
+    def get_gradient(percentage: float) -> list:
+        """Get gradient colors based on quota percentage."""
+        if percentage <= 20:
+            return QuotaColors.CRITICAL_GRADIENT
+        elif percentage <= 50:
+            return QuotaColors.LOW_GRADIENT
+        elif percentage <= 80:
+            return QuotaColors.MEDIUM_GRADIENT
+        else:
+            return QuotaColors.HIGH_GRADIENT
+
+
+# Glow Effects
+class GlowEffects:
+    """Glow and shadow effects for premium UI."""
+    
+    @staticmethod
+    def create_glow(color: str, intensity: float = 0.5, blur: int = 20) -> ft.BoxShadow:
+        """Create a glow effect shadow."""
+        return ft.BoxShadow(
+            spread_radius=0,
+            blur_radius=blur,
+            color=ft.Colors.with_opacity(intensity, color),
+            offset=ft.Offset(0, 0)
+        )
+    
+    @staticmethod
+    def create_elevation(level: int = 2) -> ft.BoxShadow:
+        """Create elevation shadow."""
+        return ft.BoxShadow(
+            spread_radius=0,
+            blur_radius=level * 4,
+            color=ft.Colors.with_opacity(0.15, ft.Colors.BLACK),
+            offset=ft.Offset(0, level)
+        )
+
+
 # Helper functions for creating themed components
 def create_card(
     content: ft.Control,
@@ -279,6 +370,43 @@ def create_card(
             offset=ft.Offset(0, elevation)
         ) if elevation > 0 else None,
         animate=AnimationDuration.FAST
+    )
+
+
+def create_glass_card(
+    content: ft.Control,
+    theme: ThemeManager = None,
+    padding: int = Spacing.LG,
+    border_radius: int = Spacing.RADIUS_LG,
+    blur_intensity: int = 10,
+    opacity: float = 0.7,
+    border_glow: bool = False,
+    glow_color: str = None
+) -> ft.Container:
+    """Create a glassmorphism card with blur and transparency."""
+    tm = theme or ThemeManager.get_instance()
+    colors = tm.colors
+    
+    # Create base color with opacity
+    base_color = ft.Colors.with_opacity(opacity, colors.card)
+    
+    # Border with optional glow
+    border_color = glow_color or colors.primary if border_glow else colors.border
+    
+    # Shadow effects
+    shadows = [GlowEffects.create_elevation(2)]
+    if border_glow and glow_color:
+        shadows.append(GlowEffects.create_glow(glow_color, intensity=0.3, blur=15))
+    
+    return ft.Container(
+        content=content,
+        bgcolor=base_color,
+        border=ft.border.all(1, border_color),
+        border_radius=border_radius,
+        padding=padding,
+        shadow=shadows,
+        blur=ft.Blur(blur_intensity, blur_intensity, ft.BlurTileMode.CLAMP),
+        animate=AnimationDuration.NORMAL
     )
 
 

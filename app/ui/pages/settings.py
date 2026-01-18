@@ -22,6 +22,7 @@ class SettingsPage(ft.Container):
         on_toggle_auto_sync: Callable[[bool], None] = None,
         on_change_interval: Callable[[int], None] = None,
         on_preheat_all: Callable = None,
+        on_test_notification: Callable = None,
         theme: ThemeManager = None
     ):
         super().__init__()
@@ -35,6 +36,7 @@ class SettingsPage(ft.Container):
         self.on_toggle_auto_sync = on_toggle_auto_sync
         self.on_change_interval = on_change_interval
         self.on_preheat_all = on_preheat_all
+        self.on_test_notification = on_test_notification
         self.tm = theme or ThemeManager.get_instance()
         
         self._build()
@@ -67,14 +69,17 @@ class SettingsPage(ft.Container):
         # Preheat section
         preheat_section = self._build_preheat_section()
         
+        # Notification test section
+        notification_section = self._build_notification_section()
+        
         # Theme section
         theme_section = self._build_theme_section()
         
         # About section
         about_section = self._build_about_section()
         
-        # Main layout
-        self.content = ft.ListView(
+        # Main layout - using Column with scroll for better compatibility
+        self.content = ft.Column(
             controls=[
                 header,
                 ft.Container(height=Spacing.XL),
@@ -84,12 +89,16 @@ class SettingsPage(ft.Container):
                 ft.Container(height=Spacing.LG),
                 preheat_section,
                 ft.Container(height=Spacing.LG),
+                notification_section,
+                ft.Container(height=Spacing.LG),
                 theme_section,
                 ft.Container(height=Spacing.LG),
-                about_section
+                about_section,
+                ft.Container(height=Spacing.XXL)  # Bottom padding for scroll
             ],
             spacing=0,
-            expand=True
+            expand=True,
+            scroll=ft.ScrollMode.AUTO
         )
         
         self.expand = True
@@ -203,7 +212,7 @@ class SettingsPage(ft.Container):
                     width=150,
                     border_color=colors.border,
                     focused_border_color=colors.primary,
-                    on_change=lambda e: self._handle_change_interval(e),
+                    on_select=lambda e: self._handle_change_interval(e),
                     disabled=not self.auto_sync_enabled
                 )
             ], spacing=Spacing.MD)
@@ -231,6 +240,35 @@ class SettingsPage(ft.Container):
         ], spacing=Spacing.MD)
         
         return self._build_section_card("Preheat Models", ft.Icons.ROCKET_LAUNCH, content)
+    
+    def _build_notification_section(self) -> ft.Container:
+        """Build notification test section."""
+        colors = self.tm.colors
+        
+        content = ft.Column([
+            ft.Text(
+                "Kiểm tra hệ thống thông báo reset quota và auto-preheat",
+                size=Typography.CAPTION,
+                color=colors.text_muted
+            ),
+            ft.Row([
+                ft.ElevatedButton(
+                    "🔔 Test Notification",
+                    icon=ft.Icons.NOTIFICATIONS_ACTIVE,
+                    bgcolor=colors.info,
+                    color=colors.on_primary,
+                    on_click=lambda e: self.on_test_notification() if self.on_test_notification else None
+                ),
+                ft.Text(
+                    "Sẽ gửi thông báo test kèm âm thanh",
+                    size=Typography.SMALL,
+                    color=colors.text_muted,
+                    italic=True
+                )
+            ], spacing=Spacing.MD, alignment=ft.MainAxisAlignment.START)
+        ], spacing=Spacing.MD)
+        
+        return self._build_section_card("Kiểm tra Thông báo", ft.Icons.NOTIFICATIONS, content)
     
     def _build_theme_section(self) -> ft.Container:
         """Build theme configuration section."""

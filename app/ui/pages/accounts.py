@@ -95,8 +95,10 @@ class AccountsPage(ft.Container):
                 icon_color=colors.text_secondary,
                 items=[
                     ft.PopupMenuItem(
-                        text="Xóa tất cả",
-                        icon=ft.Icons.DELETE_SWEEP,
+                        content=ft.Row([
+                            ft.Icon(ft.Icons.DELETE_SWEEP, size=18, color=colors.danger),
+                            ft.Text("Xóa tất cả", color=colors.text_primary)
+                        ], spacing=Spacing.SM),
                         on_click=lambda e: self.on_clear_all() if self.on_clear_all else None
                     )
                 ]
@@ -149,7 +151,7 @@ class AccountsPage(ft.Container):
             ft.Container(height=Spacing.LG),
             search_bar,
             content
-        ], spacing=0, expand=True)
+        ], spacing=0, expand=True, scroll=ft.ScrollMode.AUTO)
         
         self.expand = True
         self.padding = Spacing.XL

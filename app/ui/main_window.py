@@ -213,6 +213,7 @@ def main(page: ft.Page):
             on_save_path=handle_save_path,
             on_browse_path=handle_browse_path,
             on_preheat_all=handle_preheat_all,
+            on_test_notification=handle_test_notification,
             theme=tm
         )
     
@@ -461,6 +462,24 @@ def main(page: ft.Page):
         toast_manager.info("Đang preheat", "Đang preheat tất cả models...")
         threading.Thread(target=run_async, daemon=True).start()
     
+    def handle_test_notification():
+        """Handle test notification button."""
+        # Get current account for testing
+        current_email, _ = get_current_account_info()
+        
+        if current_email == "Chưa đăng nhập":
+            toast_manager.warning("Lỗi", "Vui lòng đăng nhập trước khi test")
+            return
+        
+        # Call the notification service test method
+        notification_svc.test_notification(
+            email=current_email,
+            model_id="gemini-2.0-flash-exp",
+            model_name="Gemini 2.0 Flash (TEST)"
+        )
+        
+        toast_manager.success("Test", "Đã gửi thông báo test! Kiểm tra tab Thông báo.")
+    
     def handle_save_path(path: str):
         """Handle save Antigravity path."""
         import pathlib
@@ -530,16 +549,34 @@ def main(page: ft.Page):
     )
     
     # === Main Layout ===
-    main_layout = ft.Stack([
-        ft.Row([
-            sidebar,
-            content_container
-        ], spacing=0, expand=True),
-        toast_overlay,
-        loading_overlay
-    ])
+    main_layout = ft.Stack(
+        controls=[
+            ft.Row([
+                sidebar,
+                content_container
+            ], spacing=0, expand=True, vertical_alignment=ft.CrossAxisAlignment.START),
+            toast_overlay,
+            loading_overlay
+        ],
+        expand=True
+    )
     
     page.add(main_layout)
+    
+    # === Theme Change Handler ===
+    def on_theme_change():
+        """Handle theme change - rebuild all UI components."""
+        nonlocal sidebar
+        # Update content container background
+        content_container.bgcolor = tm.colors.background
+        # Rebuild sidebar
+        sidebar._build()
+        sidebar.update()
+        # Rebuild current page
+        refresh_current_page()
+    
+    # Register theme change callback
+    tm.add_theme_change_callback(on_theme_change)
     
     # === Initialize ===
     # Build initial page
@@ -548,7 +585,7 @@ def main(page: ft.Page):
     page.update()
     
     # Start notification monitor
-    notification_svc.start_monitor(interval_seconds=60)
+    notification_svc.start_monitor(interval_seconds=30)
     
     # === Keyboard Shortcuts ===
     def handle_keyboard(e: ft.KeyboardEvent):
