@@ -1,18 +1,27 @@
+"""
+Antigravity Agent
+Main entry point for the application.
+"""
 import sys
 import os
-from app.api.server import start_api_thread
-import flet as ft
-from app.ui.main_window import main as ui_main
+
+# Add the project root to sys.path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from app.ui.main_window import AntigravityApp
+from app.api.server import run_api
+from app.core.logger import logger
+import threading
+
+def start_api():
+    logger.info("STARTING: API Server for Antigravity Agent...")
+    run_api()
 
 if __name__ == "__main__":
-    print("STARTING: Antigravity Agent (Python)...")
+    # Start API server in a separate thread
+    api_thread = threading.Thread(target=start_api, daemon=True)
+    api_thread.start()
     
-    # 1. Khởi động API Server chạy ngầm
-    try:
-        start_api_thread()
-        print("SUCCESS: API Server started at http://127.0.0.1:18888")
-    except Exception as e:
-        print(f"ERROR: Could not start API Server: {e}")
-
-    # 2. Khởi động Giao diện người dùng
-    ft.app(ui_main, assets_dir="assets")
+    logger.info("STARTING: Antigravity Agent...")
+    app = AntigravityApp()
+    app.mainloop()

@@ -22,6 +22,7 @@ wheels/
 share/python-wheels/
 *.egg-info/
 .installed.cfg
+design-system/
 *.egg
 MANIFEST
 

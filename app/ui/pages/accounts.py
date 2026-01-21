@@ -1,209 +1,114 @@
 """
-Accounts Page
-Account management with cards, search, and actions
+Accounts Page for CustomTkinter
 """
-import flet as ft
-from typing import Callable, List, Optional
-from app.ui.theme import ThemeManager, Spacing, Typography, AnimationDuration
-from app.ui.components.account_card import AccountCard
+import customtkinter as ctk
+from ..theme import CTKColors, CTKTypography
 
-
-class AccountsPage(ft.Container):
-    """Account management page."""
-    
-    def __init__(
-        self,
-        accounts: List[dict] = None,  # [{email, plan, quota_data, is_active}]
-        on_switch: Callable[[str], None] = None,
-        on_delete: Callable[[str], None] = None,
-        on_refresh: Callable[[str], None] = None,
-        on_refresh_all: Callable = None,
-        on_clear_all: Callable = None,
-        on_save_current: Callable = None,
-        theme: ThemeManager = None
-    ):
-        super().__init__()
+class AccountCard(ctk.CTkFrame):
+    def __init__(self, master, email, plan, is_active, on_switch, on_delete, **kwargs):
+        super().__init__(master, fg_color=CTKColors.CARD, corner_radius=12, border_width=1, border_color=CTKColors.PRIMARY if is_active else CTKColors.BORDER, **kwargs)
         
-        self.accounts = accounts or []
+        self.email = email
         self.on_switch = on_switch
         self.on_delete = on_delete
-        self.on_refresh = on_refresh
-        self.on_refresh_all = on_refresh_all
-        self.on_clear_all = on_clear_all
-        self.on_save_current = on_save_current
-        self.tm = theme or ThemeManager.get_instance()
         
-        self._search_query = ""
-        self._build()
-    
-    def _build(self):
-        """Build the accounts page."""
-        colors = self.tm.colors
+        # Email
+        self.email_label = ctk.CTkLabel(self, text=email, font=CTKTypography.SUBTITLE, text_color=CTKColors.TEXT_PRIMARY)
+        self.email_label.pack(pady=(15, 0), padx=15, anchor="w")
+        
+        # Details row
+        self.details_row = ctk.CTkFrame(self, fg_color="transparent")
+        self.details_row.pack(fill="x", padx=15, pady=(5, 15))
+        
+        # Plan Badge
+        self.plan_frame = ctk.CTkFrame(self.details_row, fg_color=CTKColors.PRIMARY if is_active else CTKColors.SURFACE_VARIANT, corner_radius=10)
+        self.plan_frame.pack(side="left")
+        
+        self.plan_label = ctk.CTkLabel(self.plan_frame, text=plan.upper(), font=CTKTypography.TINY, text_color=CTKColors.TEXT_ON_PRIMARY if is_active else CTKColors.TEXT_SECONDARY)
+        self.plan_label.pack(padx=8, pady=2)
+        
+        # Action Buttons container (visible on hover would be cool, but let's keep it simple for now)
+        self.actions_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.actions_frame.pack(fill="x", padx=15, pady=(0, 15))
+        
+        self.switch_btn = ctk.CTkButton(
+            self.actions_frame, 
+            text="Switch Account", 
+            height=32,
+            fg_color=CTKColors.PRIMARY if not is_active else CTKColors.SURFACE_VARIANT,
+            state="normal" if not is_active else "disabled",
+            command=lambda: self.on_switch(email)
+        )
+        self.switch_btn.pack(side="left", expand=True, fill="x", padx=(0, 5))
+        
+        self.delete_btn = ctk.CTkButton(
+            self.actions_frame, 
+            text="×", 
+            width=32, 
+            height=32, 
+            fg_color=CTKColors.SURFACE_VARIANT,
+            hover_color=CTKColors.DANGER,
+            command=lambda: self.on_delete(email)
+        )
+        self.delete_btn.pack(side="right")
+
+class AccountsPage(ctk.CTkFrame):
+    def __init__(self, master, on_switch=None, on_delete=None, on_import=None, on_export=None, **kwargs):
+        super().__init__(master, fg_color="transparent", **kwargs)
+        self.on_switch_cb = on_switch
+        self.on_delete_cb = on_delete
+        self.on_import_cb = on_import
+        self.on_export_cb = on_export
         
         # Header
-        header = ft.Row([
-            ft.Column([
-                ft.Text(
-                    "Quản lý Tài khoản",
-                    size=Typography.DISPLAY,
-                    weight=Typography.BOLD,
-                    color=colors.text_primary
-                ),
-                ft.Text(
-                    f"{len(self.accounts)} tài khoản đã lưu",
-                    size=Typography.BODY,
-                    color=colors.text_secondary
-                )
-            ], spacing=Spacing.XS),
-            ft.Container(expand=True),
-            ft.ElevatedButton(
-                "Sao lưu hiện tại",
-                icon=ft.Icons.ADD,
-                bgcolor=colors.primary,
-                color=colors.on_primary,
-                on_click=lambda e: self.on_save_current() if self.on_save_current else None
-            )
-        ])
+        self.header_row = ctk.CTkFrame(self, fg_color="transparent")
+        self.header_row.pack(fill="x", pady=(0, 20))
         
-        # Search and filter bar
-        self.search_field = ft.TextField(
-            hint_text="Tìm kiếm tài khoản...",
-            prefix_icon=ft.Icons.SEARCH,
-            border_color=colors.border,
-            focused_border_color=colors.primary,
-            border_radius=Spacing.RADIUS_MD,
-            height=42,
-            expand=True,
-            on_change=self._handle_search,
-            text_style=ft.TextStyle(color=colors.text_primary),
-            hint_style=ft.TextStyle(color=colors.text_muted)
-        )
+        self.header = ctk.CTkLabel(self.header_row, text="Account Manager", font=CTKTypography.HEADLINE)
+        self.header.pack(side="left")
+
+        self.export_btn = ctk.CTkButton(self.header_row, text="Export", width=80, fg_color=CTKColors.SURFACE_VARIANT, command=self.on_export_cb)
+        self.export_btn.pack(side="right", padx=(10, 0))
+
+        self.import_btn = ctk.CTkButton(self.header_row, text="Import", width=80, fg_color=CTKColors.SURFACE_VARIANT, command=self.on_import_cb)
+        self.import_btn.pack(side="right")
         
-        search_bar = ft.Row([
-            self.search_field,
-            ft.Container(width=Spacing.MD),
-            ft.ElevatedButton(
-                "Làm mới tất cả",
-                icon=ft.Icons.REFRESH,
-                bgcolor=colors.accent,
-                color=colors.on_primary,
-                height=42,
-                on_click=lambda e: self.on_refresh_all() if self.on_refresh_all else None
-            ),
-            ft.PopupMenuButton(
-                icon=ft.Icons.MORE_VERT,
-                icon_color=colors.text_secondary,
-                items=[
-                    ft.PopupMenuItem(
-                        content=ft.Row([
-                            ft.Icon(ft.Icons.DELETE_SWEEP, size=18, color=colors.danger),
-                            ft.Text("Xóa tất cả", color=colors.text_primary)
-                        ], spacing=Spacing.SM),
-                        on_click=lambda e: self.on_clear_all() if self.on_clear_all else None
-                    )
-                ]
-            )
-        ])
+        # Search
+        self.search_entry = ctk.CTkEntry(self, placeholder_text="Search account email...", width=400, height=40)
+        self.search_entry.pack(anchor="w", pady=(0, 20))
+        self.search_entry.bind("<KeyRelease>", self._on_search)
         
-        # Account cards list
-        account_cards = self._build_account_cards()
+        # Scrollable Grid
+        self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color="transparent", height=500)
+        self.scroll_frame.pack(fill="both", expand=True)
         
-        # Empty state
-        if not self.accounts:
-            empty_state = ft.Container(
-                content=ft.Column([
-                    ft.Icon(ft.Icons.PERSON_OFF, color=colors.text_muted, size=64),
-                    ft.Text(
-                        "Chưa có tài khoản nào",
-                        size=Typography.TITLE,
-                        weight=Typography.SEMI_BOLD,
-                        color=colors.text_secondary
-                    ),
-                    ft.Text(
-                        "Nhấn 'Sao lưu hiện tại' để lưu tài khoản đang đăng nhập",
-                        size=Typography.BODY,
-                        color=colors.text_muted
-                    ),
-                    ft.Container(height=Spacing.MD),
-                    ft.ElevatedButton(
-                        "Sao lưu tài khoản hiện tại",
-                        icon=ft.Icons.ADD,
-                        bgcolor=colors.primary,
-                        color=colors.on_primary,
-                        on_click=lambda e: self.on_save_current() if self.on_save_current else None
-                    )
-                ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=Spacing.SM),
-                alignment=ft.Alignment(0, 0),
-                expand=True
-            )
-            content = empty_state
-        else:
-            content = ft.ListView(
-                controls=account_cards,
-                spacing=Spacing.MD,
-                expand=True,
-                padding=ft.padding.only(top=Spacing.MD)
-            )
+        # Layout accounts in grid
+        self.grid_container = ctk.CTkFrame(self.scroll_frame, fg_color="transparent")
+        self.grid_container.pack(fill="both", expand=True)
         
-        # Main layout
-        self.content = ft.Column([
-            header,
-            ft.Container(height=Spacing.LG),
-            search_bar,
-            content
-        ], spacing=0, expand=True, scroll=ft.ScrollMode.AUTO)
+        self.all_accounts = []
         
-        self.expand = True
-        self.padding = Spacing.XL
-    
-    def _build_account_cards(self) -> List[AccountCard]:
-        """Build account card components."""
-        cards = []
-        
-        # Filter by search query
-        filtered_accounts = self.accounts
-        if self._search_query:
-            query = self._search_query.lower()
-            filtered_accounts = [a for a in self.accounts if query in a.get("email", "").lower()]
-        
-        for acc in filtered_accounts:
-            email = acc.get("email", "Unknown")
-            plan = acc.get("plan", "Unknown")
-            is_active = acc.get("is_active", False)
-            quota_data = acc.get("quota_data", [])
+    def _on_search(self, event=None):
+        query = self.search_entry.get().lower()
+        filtered = [acc for acc in self.all_accounts if query in acc.get('email', '').lower()]
+        self._display_accounts(filtered)
+
+    def update_accounts(self, accounts):
+        self.all_accounts = accounts
+        self._on_search()
             
-            # Convert quota data to expected format
-            quota_list = []
-            if quota_data:
-                for q in quota_data:
-                    quota_list.append({
-                        "model_name": q.model_name if hasattr(q, 'model_name') else q.get("model_name", "Unknown"),
-                        "percentage": q.percentage if hasattr(q, 'percentage') else q.get("percentage", 0),
-                        "reset_text": q.reset_text if hasattr(q, 'reset_text') else q.get("reset_text", "")
-                    })
+    def _display_accounts(self, accounts):
+        for widget in self.grid_container.winfo_children():
+            widget.destroy()
             
+        for i, acc in enumerate(accounts):
             card = AccountCard(
-                email=email,
-                plan=plan,
-                is_active=is_active,
-                quota_data=quota_list,
-                on_switch=self.on_switch,
-                on_delete=self.on_delete,
-                on_refresh=self.on_refresh,
-                theme=self.tm
+                self.grid_container, 
+                acc.get('email'), 
+                acc.get('plan'), 
+                acc.get('is_active'),
+                on_switch=self.on_switch_cb,
+                on_delete=self.on_delete_cb
             )
-            cards.append(card)
-        
-        return cards
-    
-    def _handle_search(self, e):
-        """Handle search input change."""
-        self._search_query = e.control.value
-        self._build()
-        self.update()
-    
-    def update_accounts(self, accounts: List[dict]):
-        """Update accounts list."""
-        self.accounts = accounts
-        self._build()
-        self.update()
+            card.grid(row=i // 3, column=i % 3, padx=10, pady=10, sticky="nsew")
+            self.grid_container.grid_columnconfigure(i % 3, weight=1)

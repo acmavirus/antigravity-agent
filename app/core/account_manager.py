@@ -95,6 +95,66 @@ class AccountManager:
         return False, "Tài khoản không tồn tại."
 
     @staticmethod
+    def export_accounts(target_path: str) -> Tuple[bool, str]:
+        """Xuất danh sách tất cả tài khoản đã lưu thành một file mã hóa XOR."""
+        accounts_data = []
+        pattern = os.path.join(ACCOUNTS_DIR, "*.json")
+        for file_path in glob.glob(pattern):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    accounts_data.append(json.load(f))
+            except: pass
+        
+        if not accounts_data:
+            return False, "Không có tài khoản nào để xuất."
+            
+        try:
+            raw_data = json.dumps(accounts_data).encode('utf-8')
+            # Đơn giản XOR (Key: antigravity)
+            key = b"antigravity"
+            encrypted = bytearray(raw_data)
+            for i in range(len(encrypted)):
+                encrypted[i] ^= key[i % len(key)]
+            
+            with open(target_path, 'wb') as f:
+                f.write(encrypted)
+            return True, f"Đã xuất {len(accounts_data)} tài khoản."
+        except Exception as e:
+            return False, str(e)
+
+    @staticmethod
+    def import_accounts(source_path: str) -> Tuple[bool, str]:
+        """Nhập tài khoản từ file mã hóa XOR."""
+        if not os.path.exists(source_path):
+            return False, "File không tồn tại."
+            
+        try:
+            with open(source_path, 'rb') as f:
+                encrypted = f.read()
+            
+            # Giải mã XOR
+            key = b"antigravity"
+            decrypted = bytearray(encrypted)
+            for i in range(len(decrypted)):
+                decrypted[i] ^= key[i % len(key)]
+            
+            accounts_data = json.loads(decrypted.decode('utf-8'))
+            count = 0
+            for acc in accounts_data:
+                state = acc.get(AGENT_STATE_KEY)
+                if state:
+                    summary = AuthHandler.get_account_summary(state)
+                    email = summary["email"]
+                    if email != "Unknown":
+                        file_path = os.path.join(ACCOUNTS_DIR, f"{email}.json")
+                        with open(file_path, 'w', encoding='utf-8') as f:
+                            json.dump({AGENT_STATE_KEY: state}, f)
+                        count += 1
+            return True, f"Đã nhập thành công {count} tài khoản."
+        except Exception as e:
+            return False, f"Lỗi nhập file: {str(e)}"
+
+    @staticmethod
     def clear_all_accounts() -> Tuple[int, str]:
         """Xóa tất cả tài khoản trong thư mục backup."""
         pattern = os.path.join(ACCOUNTS_DIR, "*.json")
