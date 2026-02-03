@@ -36,11 +36,33 @@ export class QuotaService {
         "gpt-oss-120b-medium": "GPT-OSS 120B (Medium)",
     };
 
+    private readonly STORAGE_KEY_QUOTAS = 'antigravity.quotas';
+
     constructor(
         private context: vscode.ExtensionContext,
         private accountService: AccountService
     ) {
-        this.cache = new NodeCache({ stdTTL: 60, checkperiod: 120 });
+        this.cache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
+        this.loadPersistentQuotas();
+    }
+
+    private loadPersistentQuotas() {
+        const data = this.context.globalState.get<Record<string, ModelQuota[]>>(this.STORAGE_KEY_QUOTAS);
+        if (data) {
+            for (const [accountId, quotas] of Object.entries(data)) {
+                this.cache.set(accountId, quotas);
+            }
+        }
+    }
+
+    private async savePersistentQuotas() {
+        const allQuotas: Record<string, ModelQuota[]> = {};
+        const keys = this.cache.keys();
+        for (const key of keys) {
+            const val = this.cache.get<ModelQuota[]>(key);
+            if (val) allQuotas[key] = val;
+        }
+        await this.context.globalState.update(this.STORAGE_KEY_QUOTAS, allQuotas);
     }
 
     public async refreshAll(forceAll: boolean = false) {
@@ -56,11 +78,28 @@ export class QuotaService {
             }
 
             try {
-                const quotas = await this.fetchQuotaRealtime(account);
-                if (quotas && quotas.length > 0) {
-                    this.cache.set(account.id, quotas);
+                const freshQuotas = await this.fetchQuotaRealtime(account);
+                if (freshQuotas && freshQuotas.length > 0) {
+                    const existingQuotas = this.getCachedQuotas(account.id) || [];
+
+                    // Thực hiện UPDATE thay vì xóa đi tạo lại
+                    const updatedQuotas = [...existingQuotas];
+                    freshQuotas.forEach(newQ => {
+                        const index = updatedQuotas.findIndex(q => q.modelId === newQ.modelId);
+                        if (index !== -1) {
+                            // Cập nhật các trường dữ liệu mới
+                            updatedQuotas[index] = { ...updatedQuotas[index], ...newQ };
+                        } else {
+                            // Nếu model mới thì thêm vào
+                            updatedQuotas.push(newQ);
+                        }
+                    });
+
+                    this.cache.set(account.id, updatedQuotas);
+                    await this.savePersistentQuotas();
+
                     if (!forceAll || account.name === activeEmail) {
-                        this.updateStatusBar(quotas);
+                        this.updateStatusBar(updatedQuotas);
                     }
                 }
             } catch (error: any) {
@@ -233,7 +272,8 @@ export class QuotaService {
         const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Chọn Model hiển thị trên thanh trạng thái' });
         if (picked) {
             await this.context.globalState.update(this.STORAGE_KEY_PINNED, picked.id);
-            this.refreshAll(false);
+            // Cập nhật ngay hạn mức khi người dùng đổi model
+            await this.refreshAll(false);
         }
     }
 

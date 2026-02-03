@@ -76,9 +76,17 @@ export class AccountService {
                 };
             }
 
-            this.accounts.push(newAccount);
+            const existingIndex = this.accounts.findIndex(a => a.name === newAccount.name);
+            if (existingIndex !== -1) {
+                this.accounts[existingIndex].data = newAccount.data;
+                this.accounts[existingIndex].status = newAccount.status;
+                this.accounts[existingIndex].lastChecked = Date.now();
+                vscode.window.showInformationMessage(`Đã cập nhật tài khoản: ${newAccount.name}`);
+            } else {
+                this.accounts.push(newAccount);
+                vscode.window.showInformationMessage(`Đã thêm tài khoản: ${newAccount.name}`);
+            }
             await this.saveAccounts();
-            vscode.window.showInformationMessage(`Đã thêm tài khoản: ${newAccount.name}`);
         } catch (e) {
             vscode.window.showErrorMessage('Lỗi khi thêm tài khoản: Dữ liệu không hợp lệ.');
         } finally {
