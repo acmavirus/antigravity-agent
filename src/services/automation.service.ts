@@ -51,21 +51,32 @@ export class AutomationService {
     private startAutomating() {
         if (this.timer) return;
 
-        // Scan liên tục mỗi 1s để tìm các nút Accept/Run
+        // Quét liên tục mỗi 1s
         this.timer = setInterval(async () => {
             if (!this.isEnabled) return;
 
-            try {
-                // Thử thực thi các lệnh chấp nhận mặc định của VS Code/Antigravity
-                // Lưu ý: Các ID command này phụ thuộc vào implementation của Agent core
-                // Chúng ta sẽ cố gắng gọi các command phổ biến liên quan đến chấp nhận step.
+            // Danh sách các ID command tiềm năng của Antigravity Agent Core
+            const potentialCommands = [
+                'antigravity.step.accept',
+                'antigravity.step.run',
+                'antigravity.step.approve',
+                'antigravity.step.apply',
+                'antigravity.acceptAll',
+                'antigravity.accept',
+                'antigravity.agent.acceptStep',
+                'aipr.accept',
+                'aipr.continue',
+                'cortex.acceptAll',
+                'cortex.runCommand'
+            ];
 
-                await vscode.commands.executeCommand('antigravity.agent.acceptStep');
-                await vscode.commands.executeCommand('antigravity.agent.runCommand');
-                await vscode.commands.executeCommand('antigravity.agent.saveFile');
-
-            } catch (err) {
-                // Bỏ qua lỗi nếu command không tồn tại trong context hiện tại
+            for (const cmd of potentialCommands) {
+                try {
+                    // Cố gắng thực thi lệnh mà không cần đối số (Accept All/Current)
+                    await vscode.commands.executeCommand(cmd);
+                } catch (e) {
+                    // Lệnh không tồn tại hoặc lỗi thực thi, bỏ qua
+                }
             }
         }, 1000);
     }

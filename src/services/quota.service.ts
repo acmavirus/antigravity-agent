@@ -12,6 +12,7 @@ export interface ModelQuota {
     limit: number;
     percent?: number;
     resetTime: string;
+    resetTimeRaw?: number;
     groupLabel?: string;
     isPinned?: boolean;
 }
@@ -160,7 +161,8 @@ export class QuotaService {
                         used: 100 - remainingPercent,
                         limit: 100,
                         percent: remainingPercent,
-                        resetTime: this.formatResetTime(resetTimeRaw)
+                        resetTime: this.formatResetTime(resetTimeRaw),
+                        resetTimeRaw: resetTimeRaw ? new Date(resetTimeRaw).getTime() : undefined
                     });
                 }
             }

@@ -66,6 +66,21 @@
                     "default": 300,
                     "description": "Khoảng thời gian cập nhật hạn mức (giây)."
                 },
+                "antigravity.enableAutoWakeup": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Bật/Tắt tính năng Auto Wake-up khi model đến giờ reset."
+                },
+                "antigravity.workHoursOnly": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Chỉ thực hiện Wake-up trong khung giờ làm việc."
+                },
+                "antigravity.workHours": {
+                    "type": "string",
+                    "default": "08:00-22:00",
+                    "description": "Khung giờ làm việc cho phép Wake-up (nếu bật workHoursOnly)."
+                },
                 "antigravity.language": {
                     "type": "string",
                     "default": "vi",

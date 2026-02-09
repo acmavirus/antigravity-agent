@@ -12,7 +12,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Initialize Services
     const accountService = new AccountService(context);
     const quotaService = new QuotaService(context, accountService);
-    const schedulerService = new SchedulerService(context, quotaService);
+    const schedulerService = new SchedulerService(context, quotaService, accountService);
     const automationService = new AutomationService(context);
 
     // Initialize UI Providers
