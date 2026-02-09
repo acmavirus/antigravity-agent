@@ -14,9 +14,83 @@ document.addEventListener('DOMContentLoaded', () => {
     const refreshBtn = document.getElementById('refreshBtn');
     const addBtn = document.getElementById('addBtn');
     const autoImportBtn = document.getElementById('autoImportBtn');
+    const settingsBtn = document.getElementById('settingsBtn');
+    const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+    const settingsPanel = document.getElementById('settings-panel');
+
+    // UI Configuration State
+    let config = vscode.getState() || {
+        theme: 'auto',
+        accentColor: '#38bdf8',
+        layout: 'comfortable',
+        glassEffect: true,
+        collapsedAccounts: []
+    };
+
+    // Initialize UI from config
+    applyConfig(config);
+
+    function applyConfig(newConfig) {
+        config = { ...config, ...newConfig };
+        vscode.setState(config);
+
+        // Apply Theme
+        document.body.className = '';
+        if (config.theme !== 'auto') document.body.classList.add(`theme-${config.theme}`);
+        if (!config.glassEffect) document.body.classList.add('no-glass');
+        if (config.layout === 'compact') document.body.classList.add('layout-compact');
+
+        // Apply Accent Color - Only override if not 'auto' theme or if manually set
+        if (config.theme !== 'auto') {
+            document.documentElement.style.setProperty('--accent', config.accentColor);
+            document.documentElement.style.setProperty('--accent-glow', config.accentColor + '4d');
+        } else {
+            document.documentElement.style.removeProperty('--accent');
+            document.documentElement.style.removeProperty('--accent-glow');
+        }
+
+        // Update Settings UI
+        document.querySelectorAll('.theme-opt').forEach(opt => {
+            opt.classList.toggle('active', opt.dataset.theme === config.theme);
+        });
+        document.querySelectorAll('.color-opt').forEach(opt => {
+            opt.classList.toggle('active', opt.dataset.color === config.accentColor);
+        });
+        document.getElementById('layoutSelect').value = config.layout;
+        document.getElementById('glassEffect').checked = config.glassEffect;
+    }
+
+    // Settings Panel Event Listeners
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', () => {
+            settingsPanel.classList.remove('hidden');
+        });
+    }
+
+    if (closeSettingsBtn) {
+        closeSettingsBtn.addEventListener('click', () => {
+            settingsPanel.classList.add('hidden');
+        });
+    }
+
+    document.querySelectorAll('.theme-opt').forEach(opt => {
+        opt.addEventListener('click', () => applyConfig({ theme: opt.dataset.theme }));
+    });
+
+    document.querySelectorAll('.color-opt').forEach(opt => {
+        opt.addEventListener('click', () => applyConfig({ accentColor: opt.dataset.color }));
+    });
+
+    document.getElementById('layoutSelect').addEventListener('change', (e) => {
+        applyConfig({ layout: e.target.value });
+    });
+
+    document.getElementById('glassEffect').addEventListener('change', (e) => {
+        applyConfig({ glassEffect: e.target.checked });
+    });
 
     // Lưu trữ trạng thái thu gọn của các card
-    let collapsedAccounts = new Set();
+    let collapsedAccounts = new Set(config.collapsedAccounts);
 
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => {
@@ -63,6 +137,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 collapsedAccounts.delete(id);
             }
+            config.collapsedAccounts = Array.from(collapsedAccounts);
+            vscode.setState(config);
         }
     });
 

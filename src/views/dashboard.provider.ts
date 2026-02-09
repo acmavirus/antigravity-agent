@@ -90,8 +90,50 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                 <button id="autoImportBtn" title="Tự động nhập"><i class="codicon codicon-cloud-download"></i></button>
                 <button id="addBtn" title="Thêm tài khoản"><i class="codicon codicon-add"></i></button>
                 <button id="refreshBtn" title="Làm mới"><i class="codicon codicon-refresh"></i></button>
+                <button id="settingsBtn" title="Tùy chỉnh giao diện"><i class="codicon codicon-settings"></i></button>
             </div>
         </header>
+
+        <div id="settings-panel" class="settings-panel hidden">
+            <div class="settings-header">
+                <h3>Tùy chỉnh giao diện</h3>
+                <button id="closeSettingsBtn"><i class="codicon codicon-close"></i></button>
+            </div>
+            <div class="settings-content">
+                <div class="setting-group">
+                    <label>Chủ đề</label>
+                    <div class="theme-options">
+                        <button class="theme-opt active" data-theme="auto" title="Tự động (VS Code)">🖥️</button>
+                        <button class="theme-opt" data-theme="dark" title="Tối">🌑</button>
+                        <button class="theme-opt" data-theme="light" title="Sáng">☀️</button>
+                        <button class="theme-opt" data-theme="cyber" title="Cyberpunk">🔮</button>
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <label>Màu nhấn (Accent)</label>
+                    <div class="color-options">
+                        <button class="color-opt active" data-color="#38bdf8" style="background: #38bdf8;"></button>
+                        <button class="color-opt" data-color="#10b981" style="background: #10b981;"></button>
+                        <button class="color-opt" data-color="#f59e0b" style="background: #f59e0b;"></button>
+                        <button class="color-opt" data-color="#ef4444" style="background: #ef4444;"></button>
+                        <button class="color-opt" data-color="#818cf8" style="background: #818cf8;"></button>
+                        <button class="color-opt" data-color="#f472b6" style="background: #f472b6;"></button>
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <label>Chế độ hiển thị</label>
+                    <select id="layoutSelect">
+                        <option value="comfortable">Thoải mái</option>
+                        <option value="compact">Gọn gàng</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="glassEffect" checked> Hiệu ứng kính (Glassmorphism)
+                    </label>
+                </div>
+            </div>
+        </div>
         
         <div id="account-list" class="account-grid">
             <!-- Dynamic Content -->

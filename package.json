@@ -44,6 +44,18 @@
                 "command": "antigravity.addAccount",
                 "title": "Antigravity: Add Account",
                 "icon": "$(add)"
+            },
+            {
+                "command": "antigravity.toggleAutoAccept",
+                "title": "Antigravity: Toggle Auto-Accept",
+                "icon": "$(check)"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "antigravity.toggleAutoAccept",
+                "key": "ctrl+alt+shift+u",
+                "when": "activeEditor"
             }
         ],
         "configuration": {

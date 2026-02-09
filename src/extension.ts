@@ -4,6 +4,7 @@ import { AccountService } from './services/account.service';
 import { QuotaService } from './services/quota.service';
 import { SchedulerService } from './services/scheduler.service';
 import { DashboardProvider } from './views/dashboard.provider';
+import { AutomationService } from './services/automation.service';
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('Antigravity Agent is now active!');
@@ -12,6 +13,7 @@ export function activate(context: vscode.ExtensionContext) {
     const accountService = new AccountService(context);
     const quotaService = new QuotaService(context, accountService);
     const schedulerService = new SchedulerService(context, quotaService);
+    const automationService = new AutomationService(context);
 
     // Initialize UI Providers
     const dashboardProvider = new DashboardProvider(context.extensionUri, quotaService, accountService);
@@ -47,6 +49,12 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('antigravity.pinModel', () => {
             quotaService.pinModel();
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('antigravity.toggleAutoAccept', () => {
+            automationService.toggle();
         })
     );
 
