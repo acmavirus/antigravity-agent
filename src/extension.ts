@@ -24,7 +24,7 @@ export function activate(context: vscode.ExtensionContext) {
         const schedulerService = new SchedulerService(context, quotaService, accountService, logService);
 
         // Automation Service now has async initialization inside (non-blocking)
-        const automationService = new AutomationService(context, accountService, quotaService, logService, notificationService);
+        const automationService = new AutomationService(context, accountService, quotaService, logService, notificationService, analyticsService);
 
         // Initialize UI Providers
         const dashboardProvider = new DashboardProvider(context.extensionUri, quotaService, accountService, logService, analyticsService);

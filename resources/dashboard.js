@@ -2,14 +2,36 @@
 document.addEventListener('DOMContentLoaded', () => {
     const vscode = acquireVsCodeApi();
 
+    // State để tránh re-render khi dữ liệu không đổi
+    let lastSnapshots = {
+        accounts: '',
+        logs: '',
+        analytics: ''
+    };
+
     window.addEventListener('message', event => {
         const message = event.data;
-        switch (message.type) {
-            case 'update':
+        if (message.type === 'update') {
+            // Chỉ render Accounts nếu có thay đổi
+            const accountsSnap = JSON.stringify(message.accounts);
+            if (accountsSnap !== lastSnapshots.accounts) {
+                lastSnapshots.accounts = accountsSnap;
                 renderAccounts(message.accounts);
+            }
+
+            // Chỉ render Logs nếu có thay đổi
+            const logsSnap = JSON.stringify(message.logs);
+            if (logsSnap !== lastSnapshots.logs) {
+                lastSnapshots.logs = logsSnap;
                 renderLogs(message.logs);
+            }
+
+            // Chỉ render Analytics nếu có thay đổi
+            const analyticsSnap = JSON.stringify(message.analytics);
+            if (analyticsSnap !== lastSnapshots.analytics) {
+                lastSnapshots.analytics = analyticsSnap;
                 renderAnalytics(message.analytics);
-                break;
+            }
         }
     });
 
@@ -245,14 +267,22 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const maxTokens = Math.max(...data.map(d => d.tokens), 1);
+        const maxTokens = Math.max(...data.map(d => d.tokens || 0), 1);
+        const maxRequests = Math.max(...data.map(d => d.requests || 0), 1);
 
         container.innerHTML = data.map(d => {
             const height = (d.tokens / maxTokens) * 100;
+            // Hiển thị ngày/tháng từ YYYY-MM-DD
+            let displayDate = d.date;
+            if (d.date.includes('-')) {
+                const parts = d.date.split('-');
+                displayDate = `${parts[2]}/${parts[1]}`;
+            }
+
             return `
-                <div class="bar-wrapper" title="${d.date}: ${d.tokens} tokens">
-                    <div class="bar" style="height: ${height}%"></div>
-                    <span class="bar-label">${d.date.split('/')[0]}/${d.date.split('/')[1]}</span>
+                <div class="bar-wrapper" title="${d.date}: ${d.tokens} tokens, ${d.requests} requests">
+                    <div class="bar" style="height: ${Math.max(height, 5)}%"></div>
+                    <span class="bar-label">${displayDate}</span>
                 </div>
             `;
         }).join('');

@@ -66,7 +66,10 @@ export class AnalyticsService {
         const map = new Map<string, { tokens: number, requests: number }>();
 
         filtered.forEach(d => {
-            const date = new Date(d.timestamp).toLocaleDateString();
+            const dateObj = new Date(d.timestamp);
+            // Sử dụng định dạng YYYY-MM-DD để đồng bộ
+            const date = `${dateObj.getFullYear()}-${(dateObj.getMonth() + 1).toString().padStart(2, '0')}-${dateObj.getDate().toString().padStart(2, '0')}`;
+
             const current = map.get(date) || { tokens: 0, requests: 0 };
             map.set(date, {
                 tokens: current.tokens + d.tokens,
@@ -74,6 +77,9 @@ export class AnalyticsService {
             });
         });
 
-        return Array.from(map.entries()).map(([date, data]) => ({ date, ...data }));
+        // Sắp xếp theo ngày
+        return Array.from(map.entries())
+            .map(([date, data]) => ({ date, ...data }))
+            .sort((a, b) => a.date.localeCompare(b.date));
     }
 }

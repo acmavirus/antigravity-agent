@@ -62,9 +62,19 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         // Initial update
         this.updateWebview(webviewView);
 
-        // Interval update webview
-        setInterval(() => this.updateWebview(webviewView), 10000);
+        // Định kỳ cập nhật dữ liệu nhưng chỉ gửi nếu có thay đổi thực sự (tránh nháy UI)
+        const updateInterval = setInterval(() => {
+            if (webviewView.visible) {
+                this.updateWebview(webviewView);
+            }
+        }, 3000);
+
+        webviewView.onDidDispose(() => {
+            clearInterval(updateInterval);
+        });
     }
+
+    private lastDataSnapshot: string = '';
 
     private async updateWebview(webviewView: vscode.WebviewView) {
         const activeEmail = await this.accountService.getActiveEmail();
@@ -77,12 +87,24 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         const logs = this.logService.getLogs();
         const analytics = this.analyticsService.getUsageHistory();
 
-        webviewView.webview.postMessage({
-            type: 'update',
+        // Tạo snapshot để so sánh
+        const currentData = {
             accounts,
             logs,
             analytics
-        });
+        };
+
+        const currentSnapshot = JSON.stringify(currentData);
+
+        // CHỈ gửi tin nhắn nếu dữ liệu thực sự thay đổi
+        // Điều này ngăn chặn việc Webview nhận message liên tục gây re-render làm nháy màn hình
+        if (currentSnapshot !== this.lastDataSnapshot) {
+            this.lastDataSnapshot = currentSnapshot;
+            webviewView.webview.postMessage({
+                type: 'update',
+                ...currentData
+            });
+        }
     }
 
     private _getHtmlForWebview(webview: vscode.Webview) {

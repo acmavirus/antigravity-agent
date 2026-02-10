@@ -4,6 +4,7 @@ import { AccountService } from './account.service';
 import { QuotaService } from './quota.service';
 import { LogService, LogLevel } from './log.service';
 import { NotificationService } from './notification.service';
+import { AnalyticsService } from './analytics.service';
 import { CdpService } from './cdp.service';
 
 /**
@@ -61,7 +62,8 @@ export class AutomationService {
         private accountService: AccountService,
         private quotaService: QuotaService,
         private logService: LogService,
-        private notificationService: NotificationService
+        private notificationService: NotificationService,
+        private analyticsService: AnalyticsService
     ) {
         // Khởi tạo CDP Service
         this.cdpService = new CdpService(context);
@@ -129,9 +131,20 @@ export class AutomationService {
             await this.checkAndSwitchAccount();
 
             // Tự động chấp nhận - Thử mọi command có thể
+            let trackDone = false;
             for (const cmd of this.customCommands) {
                 try {
                     await vscode.commands.executeCommand(cmd);
+                    if (!trackDone) {
+                        const activeEmail = await this.accountService.getActiveEmail();
+                        if (activeEmail) {
+                            const acc = this.accountService.getAccounts().find(a => a.name === activeEmail);
+                            if (acc) {
+                                this.analyticsService.trackUsage(acc.id, 0, 1); // 0 tokens, 1 request
+                                trackDone = true;
+                            }
+                        }
+                    }
                 } catch (e) {
                     // Bỏ qua lỗi
                 }
