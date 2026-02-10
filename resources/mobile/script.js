@@ -1,15 +1,38 @@
 // Copyright by AcmaTvirus
 document.addEventListener('DOMContentLoaded', () => {
     let currentData = null;
+    let streamInterval = null;
+    let activeTargetId = null;
 
     // Tab Switching
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
-            btn.classList.add('active');
-            const tabId = btn.dataset.tab + '-tab';
-            document.getElementById(tabId).classList.add('active');
+            const tabName = btn.dataset.tab;
+            switchTab(tabName);
         });
+    });
+
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
+
+        const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
+        if (btn) btn.classList.add('active');
+
+        const content = document.getElementById(`${tabName}-tab`);
+        if (content) content.classList.add('active');
+
+        // Toggle mobile tabs visibility
+        if (tabName === 'live') {
+            document.body.classList.add('live-view-active');
+        } else {
+            document.body.classList.remove('live-view-active');
+            stopLiveView();
+        }
+    }
+
+    // Back button logic for Live View
+    document.querySelector('.back-to-mon').addEventListener('click', () => {
+        switchTab('monitor');
     });
 
     // Fetch Data
@@ -33,6 +56,16 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('connection-status').innerText = 'LIVE';
         document.getElementById('live-dot').style.backgroundColor = 'var(--success)';
         document.getElementById('active-sessions-count').innerText = currentData.monitor.filter(m => m.connected).length;
+
+        // Render Public URL
+        const tunnelArea = document.getElementById('tunnel-area');
+        const urlInput = document.getElementById('public-url-input');
+        if (currentData.publicUrl) {
+            tunnelArea.style.display = 'flex';
+            urlInput.value = currentData.publicUrl;
+        } else {
+            tunnelArea.style.display = 'none';
+        }
 
         // Render Accounts
         const accList = document.getElementById('account-list');
@@ -61,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `).join('');
 
-        // Calculate Quota Health (average of active account)
+        // Calculate Quota Health
         const activeAcc = currentData.accounts.find(a => a.isActive);
         if (activeAcc && activeAcc.quotas.length > 0) {
             const avg = Math.round(activeAcc.quotas.reduce((acc, curr) => acc + curr.percent, 0) / activeAcc.quotas.length);
@@ -76,16 +109,16 @@ document.addEventListener('DOMContentLoaded', () => {
             monList.innerHTML = '<div class="acc-card">Không tìm thấy phiên làm việc nào.</div>';
         } else {
             monList.innerHTML = currentData.monitor.map(m => `
-                <div class="mon-card ${m.connected ? 'online' : 'offline'}">
+                <div class="mon-card ${m.connected ? 'online' : 'offline'}" onclick="startLiveView('${m.id}')">
                     <div class="acc-info">
                         <span class="name" style="font-family: monospace; font-size: 0.75rem;">${m.id}</span>
-                        <span class="badge">${m.connected ? 'CONNECTED' : 'DISCONNECTED'}</span>
+                        <span class="badge">${m.connected ? 'BẤM ĐỂ XEM LIVE' : 'DISCONNECTED'}</span>
                     </div>
                 </div>
             `).join('');
         }
 
-        // Render Analytics (Mini bars)
+        // Render Analytics
         const chart = document.getElementById('analytics-chart');
         if (currentData.analytics && currentData.analytics.length > 0) {
             const max = Math.max(...currentData.analytics.map(a => a.tokens), 1);
@@ -97,7 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Render Logs
         const logCont = document.querySelector('.log-container');
-        logCont.innerHTML = currentData.logs.map(log => `
+        logCont.innerHTML = (currentData.logs || []).map(log => `
             <div class="log-item">
                 <span class="time">${new Date(log.timestamp).toLocaleTimeString()}</span>
                 <span>${log.message}</span>
@@ -105,14 +138,84 @@ document.addEventListener('DOMContentLoaded', () => {
         `).join('');
     }
 
+    // Copy URL Logic
+    document.getElementById('copy-url-btn').onclick = () => {
+        const urlInput = document.getElementById('public-url-input');
+        urlInput.select();
+        document.execCommand('copy');
+
+        const btn = document.getElementById('copy-url-btn');
+        const icon = btn.querySelector('i');
+        icon.className = 'fas fa-check';
+        btn.style.borderColor = 'var(--success)';
+        btn.style.color = 'var(--success)';
+
+        setTimeout(() => {
+            icon.className = 'fas fa-copy';
+            btn.style.borderColor = '';
+            btn.style.color = '';
+        }, 2000);
+    };
+
+    // Live View Logic
+    window.startLiveView = (id) => {
+        activeTargetId = id;
+        switchTab('live');
+        document.getElementById('live-page-title').innerText = 'Live: ' + id;
+
+        if (streamInterval) clearInterval(streamInterval);
+        streamInterval = setInterval(updateStream, 2000);
+        updateStream();
+    };
+
+    function stopLiveView() {
+        if (streamInterval) clearInterval(streamInterval);
+        streamInterval = null;
+        activeTargetId = null;
+    }
+
+    async function updateStream() {
+        if (!activeTargetId) return;
+        const img = document.getElementById('stream-img');
+        img.src = `/api/screenshot/${activeTargetId}?t=${Date.now()}`;
+    }
+
+    document.getElementById('send-cmd-btn').onclick = async () => {
+        const input = document.getElementById('cmd-input');
+        const text = input.value.trim();
+        if (!text || !activeTargetId) return;
+
+        input.disabled = true;
+        try {
+            await fetch('/api/inject', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: activeTargetId, text })
+            });
+            input.value = '';
+        } catch (e) { }
+        input.disabled = false;
+    };
+
+    document.getElementById('accept-btn').onclick = async () => {
+        if (!activeTargetId) return;
+        const btn = document.getElementById('accept-btn');
+        btn.disabled = true;
+        try {
+            await fetch('/api/accept', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: activeTargetId })
+            });
+            btn.style.backgroundColor = 'white';
+            setTimeout(() => btn.style.backgroundColor = '', 200);
+        } catch (e) { }
+        btn.disabled = false;
+    };
+
     window.switchAccount = async (id) => {
         if (!confirm('Chuyển sang tài khoản này?')) return;
         await fetch(`/api/switch/${id}`, { method: 'POST' });
-        fetchData();
-    };
-
-    document.getElementById('refresh-btn').onclick = async () => {
-        await fetch('/api/refresh', { method: 'POST' });
         fetchData();
     };
 

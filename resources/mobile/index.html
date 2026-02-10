@@ -1,19 +1,21 @@
 <!DOCTYPE html>
 <!-- Copyright by AcmaTvirus -->
 <html lang="vi">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Antigravity Mobile Dashboard</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
+
 <body>
     <div class="app-container">
         <header>
             <div class="logo-area">
-                <div class="logo-icon"></div>
+                <div class="logo-icon"><i class="fas fa-bolt"></i></div>
                 <div class="brand">
                     <span class="brand-text">ANTIGRAVITY</span>
                     <span class="brand-sub">MOBILE AGENT</span>
@@ -38,15 +40,15 @@
 
         <nav class="mobile-tabs">
             <button class="tab-btn active" data-tab="accounts">
-                <span class="icon">👤</span>
+                <span class="icon"><i class="fas fa-user-circle"></i></span>
                 <span class="text">Tài khoản</span>
             </button>
             <button class="tab-btn" data-tab="monitor">
-                <span class="icon">🖥️</span>
+                <span class="icon"><i class="fas fa-desktop"></i></span>
                 <span class="text">Giám sát</span>
             </button>
             <button class="tab-btn" data-tab="analytics">
-                <span class="icon">📊</span>
+                <span class="icon"><i class="fas fa-chart-line"></i></span>
                 <span class="text">Thống kê</span>
             </button>
         </nav>
@@ -56,7 +58,7 @@
             <div id="accounts-tab" class="tab-content active">
                 <div class="section-header">
                     <h2>Danh sách tài khoản</h2>
-                    <button id="refresh-btn" class="icon-btn">🔄</button>
+                    <button id="refresh-btn" class="icon-btn"><i class="fas fa-sync-alt"></i></button>
                 </div>
                 <div id="account-list" class="list-container">
                     <div class="loader"></div>
@@ -67,6 +69,14 @@
             <div id="monitor-tab" class="tab-content">
                 <div class="section-header">
                     <h2>Engine Status</h2>
+                </div>
+                <!-- Tunnel URL Area -->
+                <div id="tunnel-area" class="tunnel-box" style="display: none;">
+                    <span class="label">Public URL:</span>
+                    <div class="url-input-group">
+                        <input type="text" id="public-url-input" readonly>
+                        <button id="copy-url-btn" class="icon-btn"><i class="fas fa-copy"></i></button>
+                    </div>
                 </div>
                 <div id="monitor-list" class="list-container">
                     <!-- Monitor items -->
@@ -86,9 +96,31 @@
                     <div class="log-container"></div>
                 </div>
             </div>
+
+            <!-- Live View Tab (New Full Page) -->
+            <div id="live-tab" class="tab-content">
+                <div class="section-header">
+                    <h2 id="live-page-title">Live Engine</h2>
+                    <button class="back-to-mon icon-btn"><i class="fas fa-chevron-left"></i></button>
+                </div>
+
+                <div class="live-streaming-container">
+                    <img id="stream-img" src="" alt="Live Stream">
+                    <div class="stream-overlay">LIVE STREAMING</div>
+                </div>
+
+                <div class="live-controls">
+                    <div class="command-input-area">
+                        <button id="accept-btn" class="action-btn">ACCEPT</button>
+                        <input type="text" id="cmd-input" placeholder="Nhập lệnh...">
+                        <button id="send-cmd-btn">GỬI</button>
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
 
     <script src="script.js"></script>
 </body>
+
 </html>

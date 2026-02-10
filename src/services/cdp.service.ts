@@ -244,6 +244,65 @@ export class CdpService {
         } catch (e) { }
     }
 
+    public async captureScreenshot(id: string): Promise<string | null> {
+        try {
+            const result = await this.sendCommand(id, 'Page.captureScreenshot', {
+                format: 'jpeg',
+                quality: 50
+            });
+            return result.data; // Base64 string
+        } catch (e) { return null; }
+    }
+
+    public async scrapeChat(id: string): Promise<any> {
+        try {
+            // Script để lấy chat từ DOM của Cursor/Antigravity
+            const script = `
+                (() => {
+                    const messages = Array.from(document.querySelectorAll('.chat-line, .message-container'));
+                    return messages.map(m => m.innerText).slice(-5);
+                })()
+            `;
+            const result = await this.evaluate(id, script);
+            return result.value || [];
+        } catch (e) { return []; }
+    }
+
+    public async getWorkspacePath(id: string): Promise<string | null> {
+        try {
+            const result = await this.evaluate(id, 'window.vscode?.workspace?.workspaceFolders?.[0]?.uri?.path || "Unknown"');
+            return result.value;
+        } catch (e) { return null; }
+    }
+
+    public async insertAndSubmit(id: string, text: string) {
+        try {
+            await this.insertText(id, text);
+            await new Promise(r => setTimeout(r, 100));
+            await this.dispatchKey(id, 'Enter', 'Enter');
+        } catch (e) { }
+    }
+
+    public async acceptSuggestion(id: string) {
+        try {
+            const script = `
+                (() => {
+                    const buttons = Array.from(document.querySelectorAll('button, .button, [role="button"]'));
+                    const target = buttons.find(b => {
+                        const txt = b.innerText.toLowerCase();
+                        return txt.includes('accept') || txt.includes('run') || txt.includes('approve') || txt.includes('apply');
+                    });
+                    if (target) {
+                        target.click();
+                        return true;
+                    }
+                    return false;
+                })()
+            `;
+            await this.evaluate(id, script);
+        } catch (e) { }
+    }
+
     private async sendCommand(id: string, method: string, params: any): Promise<any> {
         const conn = this.connections.get(id);
         if (!conn || conn.ws.readyState !== 1) return Promise.reject('WS unavailable');
