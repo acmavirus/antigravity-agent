@@ -6,6 +6,11 @@ import { ProtobufDecoder } from './protobuf.decoder';
 import { LogService, LogLevel } from './log.service';
 import { NotificationService } from './notification.service';
 import { AnalyticsService } from './analytics.service';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import * as https from 'https';
+
+const execAsync = promisify(exec);
 
 export interface ModelQuota {
     modelId: string;
@@ -23,6 +28,7 @@ export class QuotaService {
     private cache: NodeCache;
     private statusBarItems: Map<string, vscode.StatusBarItem> = new Map();
     private readonly STORAGE_KEY_PINNED = 'antigravity.pinnedModelId';
+    private localConnection: { port: number, token: string } | null = null;
 
     // ... (URL và ID giữ nguyên)
     private readonly BASE_URL = "https://daily-cloudcode-pa.sandbox.googleapis.com";
@@ -146,6 +152,10 @@ export class QuotaService {
 
             if (!projectId || !accessToken) return [];
 
+            if (projectId === "local_fallback" && this.localConnection) {
+                return await this.fetchLocalQuota(this.localConnection.port, this.localConnection.token);
+            }
+
             const response = await axios.post(
                 `${this.BASE_URL}/v1internal:fetchAvailableModels`,
                 { project: projectId },
@@ -216,8 +226,93 @@ export class QuotaService {
             );
             return response.data.cloudaicompanionProject || response.data.project || response.data.projectId || null;
         } catch (e) {
+            // Try local fallback if cloud fails
+            const local = await this.findLocalAntigravity();
+            if (local) {
+                this.localConnection = local;
+                return "local_fallback";
+            }
             return null;
         }
+    }
+
+    private async findLocalAntigravity(): Promise<{ port: number, token: string } | null> {
+        try {
+            const command = `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'csrf_token' } | Select-Object ProcessId,CommandLine | ConvertTo-Json"`;
+            const { stdout } = await execAsync(command, { timeout: 5000 });
+            if (!stdout) return null;
+
+            let processes = JSON.parse(stdout);
+            if (!Array.isArray(processes)) processes = [processes];
+
+            for (const proc of processes) {
+                const cmdLine = proc.CommandLine || '';
+                if (!cmdLine.includes('--app_data_dir antigravity')) continue;
+
+                const tokenMatch = cmdLine.match(/--csrf_token[=\s]+([a-f0-9-]+)/i);
+                if (!tokenMatch) continue;
+
+                const token = tokenMatch[1];
+                const pid = proc.ProcessId;
+
+                // Scan common ports for this PID
+                const portCmd = `powershell -NoProfile -Command "Get-NetTCPConnection -State Listen -OwningProcess ${pid} | Select-Object -ExpandProperty LocalPort"`;
+                const { stdout: portOut } = await execAsync(portCmd);
+                const ports = portOut.match(/\b\d+\b/g)?.map(Number) || [];
+
+                for (const port of ports) {
+                    const isApi = await this.testLocalApi(port, token);
+                    if (isApi) return { port, token };
+                }
+            }
+        } catch (e) { }
+        return null;
+    }
+
+    private testLocalApi(port: number, token: string): Promise<boolean> {
+        return new Promise((resolve) => {
+            const req = https.request({
+                hostname: '127.0.0.1', port, path: '/exa.language_server_pb.LanguageServerService/GetUserStatus',
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Codeium-Csrf-Token': token },
+                timeout: 1000, rejectUnauthorized: false
+            }, (res) => resolve(res.statusCode === 200));
+            req.on('error', () => resolve(false));
+            req.write(JSON.stringify({ metadata: { ideName: 'antigravity' } }));
+            req.end();
+        });
+    }
+
+    private async fetchLocalQuota(port: number, token: string): Promise<ModelQuota[]> {
+        return new Promise((resolve) => {
+            const req = https.request({
+                hostname: '127.0.0.1', port, path: '/exa.language_server_pb.LanguageServerService/GetUserStatus',
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Codeium-Csrf-Token': token },
+                rejectUnauthorized: false
+            }, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    try {
+                        const json = JSON.parse(data);
+                        const models: ModelQuota[] = [];
+                        const configs = json.userStatus?.cascadeModelConfigData?.clientModelConfigs || [];
+                        for (const c of configs) {
+                            const p = Math.floor((c.quotaInfo?.remainingFraction || 0) * 100);
+                            models.push({
+                                modelId: c.modelOrAlias?.model || c.modelOrAlias || 'unknown',
+                                displayName: c.label || 'Unknown',
+                                used: 100 - p, limit: 100, percent: p,
+                                resetTime: "Local Sync"
+                            });
+                        }
+                        resolve(models);
+                    } catch (e) { resolve([]); }
+                });
+            });
+            req.on('error', () => resolve([]));
+            req.write(JSON.stringify({ metadata: { ideName: 'antigravity' } }));
+            req.end();
+        });
     }
 
     private formatResetTime(iso: string): string {

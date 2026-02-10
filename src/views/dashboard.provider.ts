@@ -3,6 +3,7 @@ import { QuotaService } from '../services/quota.service';
 import { AccountService } from '../services/account.service';
 import { LogService } from '../services/log.service';
 import { AnalyticsService } from '../services/analytics.service';
+import { CdpService } from '../services/cdp.service';
 
 export class DashboardProvider implements vscode.WebviewViewProvider {
     constructor(
@@ -10,7 +11,8 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         private readonly quotaService: QuotaService,
         private readonly accountService: AccountService,
         private readonly logService: LogService,
-        private readonly analyticsService: AnalyticsService
+        private readonly analyticsService: AnalyticsService,
+        private readonly cdpService: CdpService
     ) { }
 
     public resolveWebviewView(
@@ -86,18 +88,19 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
         const logs = this.logService.getLogs();
         const analytics = this.analyticsService.getUsageHistory();
+        const monitor = this.cdpService.getConnectionInfo();
 
         // Tạo snapshot để so sánh
         const currentData = {
             accounts,
             logs,
-            analytics
+            analytics,
+            monitor
         };
 
         const currentSnapshot = JSON.stringify(currentData);
 
         // CHỈ gửi tin nhắn nếu dữ liệu thực sự thay đổi
-        // Điều này ngăn chặn việc Webview nhận message liên tục gây re-render làm nháy màn hình
         if (currentSnapshot !== this.lastDataSnapshot) {
             this.lastDataSnapshot = currentSnapshot;
             webviewView.webview.postMessage({
@@ -139,6 +142,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         <nav class="tabs">
             <button class="tab-item active" data-tab="accounts">Accounts</button>
             <button class="tab-item" data-tab="analytics">Analytics</button>
+            <button class="tab-item" data-tab="monitor">Monitor</button>
             <button class="tab-item" data-tab="logs">Logs</button>
         </nav>
 
@@ -156,6 +160,20 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                     <h3>Usage Stats (7 days)</h3>
                     <div id="analytics-chart" class="chart-container">
                         <!-- Chart will be injected here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- MONITOR TAB -->
+            <div id="monitor-tab" class="tab-pane">
+                <div class="monitor-container">
+                    <div class="monitor-header">
+                        <h3>Real-time Engine</h3>
+                        <div id="monitor-status-badge" class="badge">CDP: Idle</div>
+                    </div>
+                    <div id="monitor-target-list" class="monitor-grid">
+                        <!-- Target items will be injected here -->
+                        <div class="empty-state">No active sessions found.</div>
                     </div>
                 </div>
             </div>

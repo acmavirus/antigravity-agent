@@ -14,7 +14,6 @@ export class AutomationService {
     private isEnabled: boolean = true;
     private statusBarItem: vscode.StatusBarItem;
     private pollTimer: NodeJS.Timeout | null = null;
-    private cdpService: CdpService;
     private lastState: string = '';
 
     private readonly customCommands: string[] = [
@@ -37,9 +36,9 @@ export class AutomationService {
         private quotaService: QuotaService,
         private logService: LogService,
         private notificationService: NotificationService,
-        private analyticsService: AnalyticsService
+        private analyticsService: AnalyticsService,
+        private cdpService: CdpService
     ) {
-        this.cdpService = new CdpService(context);
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         this.statusBarItem.command = 'antigravity.toggleAutoAccept';
         this.isEnabled = this.context.globalState.get<boolean>('autoAcceptEnabled', true);
@@ -88,21 +87,23 @@ export class AutomationService {
         // 1. CDP Engine (Silent & Targetted)
         await this.cdpService.start();
 
-        // 2. Tần suất 2.5 giây - Cân bằng giữa tốc độ và độ ổn định (không gây nháy)
+        // 2. Tần suất 3 giây - Tối ưu cho độ ổn định
         this.pollTimer = setInterval(async () => {
             if (!this.isEnabled) return;
 
-            // Quản lý Quota (tần suất thấp hơn)
-            if (Math.random() > 0.9) await this.checkAndSwitchAccount();
+            // Xử lý Quota và chuyển đổi tài khoản
+            if (Math.random() > 0.95) await this.checkAndSwitchAccount();
 
-            // Native Command Engine
+            // Native Commands (Duy trì tính tương thích)
             for (const cmd of this.customCommands) {
                 try {
-                    // Sử dụng executeCommand một cách an toàn
                     await vscode.commands.executeCommand(cmd);
                 } catch (e) { }
             }
-        }, 2500);
+
+            // Giao thức CDP để tương tác mức thấp (Chống treo AI)
+            // Chúng ta có thể gửi lệnh Enter định kỳ nếu AI đang chờ input mà không làm gì
+        }, 3000);
     }
 
     private async checkAndSwitchAccount() {

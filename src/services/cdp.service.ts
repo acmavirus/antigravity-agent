@@ -173,7 +173,7 @@ export class CdpService {
         }
     }
 
-    private evaluate(id: string, expression: string): Promise<any> {
+    public evaluate(id: string, expression: string): Promise<any> {
         const conn = this.connections.get(id);
         if (!conn || conn.ws.readyState !== 1) return Promise.reject('WS unavailable');
 
@@ -217,5 +217,69 @@ export class CdpService {
             if (pages.length > 0) return true;
         }
         return false;
+    }
+
+    public async dispatchKey(id: string, key: string, code: string, modifiers: number = 0) {
+        try {
+            await this.sendCommand(id, 'Input.dispatchKeyEvent', {
+                type: 'keyDown',
+                key: key,
+                code: code,
+                windowsVirtualKeyCode: key === 'Enter' ? 13 : undefined,
+                modifiers: modifiers
+            });
+            await this.sendCommand(id, 'Input.dispatchKeyEvent', {
+                type: 'keyUp',
+                key: key,
+                code: code,
+                windowsVirtualKeyCode: key === 'Enter' ? 13 : undefined,
+                modifiers: modifiers
+            });
+        } catch (e) { }
+    }
+
+    public async insertText(id: string, text: string) {
+        try {
+            await this.sendCommand(id, 'Input.insertText', { text });
+        } catch (e) { }
+    }
+
+    private async sendCommand(id: string, method: string, params: any): Promise<any> {
+        const conn = this.connections.get(id);
+        if (!conn || conn.ws.readyState !== 1) return Promise.reject('WS unavailable');
+
+        return new Promise((resolve, reject) => {
+            const msgId = this.msgId++;
+            const payload = { id: msgId, method, params };
+
+            const onMessage = (data: any) => {
+                try {
+                    const response = JSON.parse(data.toString());
+                    if (response.id === msgId) {
+                        conn.ws.off('message', onMessage);
+                        resolve(response.result);
+                    }
+                } catch (e) { }
+            };
+
+            conn.ws.on('message', onMessage);
+            conn.ws.send(JSON.stringify(payload));
+            setTimeout(() => {
+                conn.ws.off('message', onMessage);
+                reject(new Error('Timeout'));
+            }, 5000);
+        });
+    }
+
+    public getConnectionInfo() {
+        const info = [];
+        for (const [id, conn] of this.connections) {
+            info.push({
+                id,
+                injected: conn.injected,
+                connected: conn.ws.readyState === 1
+            });
+        }
+        return info;
     }
 }

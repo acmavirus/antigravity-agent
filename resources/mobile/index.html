@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<!-- Copyright by AcmaTvirus -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Antigravity Mobile Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo-area">
+                <div class="logo-icon"></div>
+                <div class="brand">
+                    <span class="brand-text">ANTIGRAVITY</span>
+                    <span class="brand-sub">MOBILE AGENT</span>
+                </div>
+            </div>
+            <div class="status-indicator">
+                <div id="live-dot" class="dot"></div>
+                <span id="connection-status">LIVE</span>
+            </div>
+        </header>
+
+        <section class="summary-cards">
+            <div class="stat-card">
+                <span class="label">ACTIVE SESSIONS</span>
+                <span id="active-sessions-count" class="value">0</span>
+            </div>
+            <div class="stat-card primary">
+                <span class="label">QUOTA HEALTH</span>
+                <span id="quota-health-pct" class="value">--%</span>
+            </div>
+        </section>
+
+        <nav class="mobile-tabs">
+            <button class="tab-btn active" data-tab="accounts">
+                <span class="icon">👤</span>
+                <span class="text">Tài khoản</span>
+            </button>
+            <button class="tab-btn" data-tab="monitor">
+                <span class="icon">🖥️</span>
+                <span class="text">Giám sát</span>
+            </button>
+            <button class="tab-btn" data-tab="analytics">
+                <span class="icon">📊</span>
+                <span class="text">Thống kê</span>
+            </button>
+        </nav>
+
+        <main id="content-area">
+            <!-- Accounts Tab -->
+            <div id="accounts-tab" class="tab-content active">
+                <div class="section-header">
+                    <h2>Danh sách tài khoản</h2>
+                    <button id="refresh-btn" class="icon-btn">🔄</button>
+                </div>
+                <div id="account-list" class="list-container">
+                    <div class="loader"></div>
+                </div>
+            </div>
+
+            <!-- Monitor Tab -->
+            <div id="monitor-tab" class="tab-content">
+                <div class="section-header">
+                    <h2>Engine Status</h2>
+                </div>
+                <div id="monitor-list" class="list-container">
+                    <!-- Monitor items -->
+                </div>
+            </div>
+
+            <!-- Analytics Tab -->
+            <div id="analytics-tab" class="tab-content">
+                <div class="section-header">
+                    <h2>Thống kê sử dụng</h2>
+                </div>
+                <div class="chart-wrapper">
+                    <div id="analytics-chart" class="mobile-chart"></div>
+                </div>
+                <div id="log-list" class="mini-logs">
+                    <h3>Hoạt động gần đây</h3>
+                    <div class="log-container"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

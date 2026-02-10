@@ -569,3 +569,103 @@ input[type="password"] {
     color: var(--text-main);
     font-size: 0.85rem;
 }
+
+/* Monitor Tab */
+.monitor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.badge {
+    padding: 4px 10px;
+    background: rgba(128, 128, 128, 0.1);
+    color: var(--text-muted);
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.badge.success {
+    background: var(--success);
+    color: white;
+}
+
+.monitor-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.monitor-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 12px;
+    border: 1px solid var(--glass-border);
+    position: relative;
+    overflow: hidden;
+}
+
+.monitor-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--text-muted);
+}
+
+.monitor-card.online::after {
+    background: var(--success);
+}
+
+.monitor-card.offline {
+    opacity: 0.6;
+}
+
+.monitor-item-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.online .status-text {
+    color: var(--success);
+}
+
+.monitor-id {
+    font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+    font-size: 0.85rem;
+    margin-bottom: 10px;
+    color: var(--accent);
+}
+
+.monitor-flags {
+    display: flex;
+    gap: 10px;
+}
+
+.flag {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.flag i {
+    font-size: 0.8rem;
+}
+
+.flag.active {
+    color: var(--text-main);
+}
+
+.flag.active i {
+    color: var(--success);
+}

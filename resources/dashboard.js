@@ -6,7 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastSnapshots = {
         accounts: '',
         logs: '',
-        analytics: ''
+        analytics: '',
+        monitor: ''
     };
 
     window.addEventListener('message', event => {
@@ -31,6 +32,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (analyticsSnap !== lastSnapshots.analytics) {
                 lastSnapshots.analytics = analyticsSnap;
                 renderAnalytics(message.analytics);
+            }
+
+            // Monitor data
+            const monitorSnap = JSON.stringify(message.monitor);
+            if (monitorSnap !== lastSnapshots.monitor) {
+                lastSnapshots.monitor = monitorSnap;
+                renderMonitor(message.monitor);
             }
         }
     });
@@ -286,5 +294,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
         }).join('');
+    }
+
+    function renderMonitor(data) {
+        const container = document.getElementById('monitor-target-list');
+        const badge = document.getElementById('monitor-status-badge');
+        if (!container) return;
+
+        if (badge) {
+            const activeCount = data.filter(d => d.connected).length;
+            badge.innerText = `CDP: ${activeCount > 0 ? 'Active (' + activeCount + ')' : 'Idle'}`;
+            badge.className = `badge ${activeCount > 0 ? 'success' : ''}`;
+        }
+
+        if (data.length === 0) {
+            container.innerHTML = '<div class="empty-state">No active sessions found. Scan in progress...</div>';
+            return;
+        }
+
+        container.innerHTML = data.map(item => `
+            <div class="monitor-card ${item.connected ? 'online' : 'offline'}">
+                <div class="monitor-item-header">
+                    <span class="port-label">ID / Port</span>
+                    <span class="status-text">${item.connected ? 'CONNECTED' : 'DISCONNECTED'}</span>
+                </div>
+                <div class="monitor-id">${item.id}</div>
+                <div class="monitor-flags">
+                    <span class="flag ${item.injected ? 'active' : ''}">
+                        <i class="codicon codicon-bracket-dot"></i> Injected
+                    </span>
+                    <span class="flag ${item.connected ? 'active' : ''}">
+                        <i class="codicon codicon-zap"></i> Live
+                    </span>
+                </div>
+            </div>
+        `).join('');
     }
 });

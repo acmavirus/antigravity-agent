@@ -8,6 +8,8 @@ import { AutomationService } from './services/automation.service';
 import { LogService, LogLevel } from './services/log.service';
 import { NotificationService } from './services/notification.service';
 import { AnalyticsService } from './services/analytics.service';
+import { CdpService } from './services/cdp.service';
+import { WebServerService } from './services/webserver.service';
 
 export function activate(context: vscode.ExtensionContext) {
     try {
@@ -18,16 +20,21 @@ export function activate(context: vscode.ExtensionContext) {
         const notificationService = new NotificationService(context);
         const analyticsService = new AnalyticsService(context);
         const accountService = new AccountService(context);
+        const cdpService = new CdpService(context);
 
         // Initialize Business Services
         const quotaService = new QuotaService(context, accountService, logService, notificationService, analyticsService);
         const schedulerService = new SchedulerService(context, quotaService, accountService, logService);
 
+        // Web Server for Mobile
+        const webServer = new WebServerService(context, accountService, quotaService, logService, analyticsService, cdpService);
+        webServer.start();
+
         // Automation Service now has async initialization inside (non-blocking)
-        const automationService = new AutomationService(context, accountService, quotaService, logService, notificationService, analyticsService);
+        const automationService = new AutomationService(context, accountService, quotaService, logService, notificationService, analyticsService, cdpService);
 
         // Initialize UI Providers
-        const dashboardProvider = new DashboardProvider(context.extensionUri, quotaService, accountService, logService, analyticsService);
+        const dashboardProvider = new DashboardProvider(context.extensionUri, quotaService, accountService, logService, analyticsService, cdpService);
 
         // Register Webview View
         context.subscriptions.push(
