@@ -3,19 +3,24 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const BASE_PORT = 9000;
-const PORT_RANGE = 5; // Quét từ 9000 đến 9005
+const PORTS_TO_SCAN = [
+    9000, 9001, 9002, 9003, 9004, 9005, // AI IDEs (Cursor/Antigravity)
+    9222, 9223, 9224, 9225,             // Standard Chrome/VSCode
+    13337,                              // Cursor specific
+    60345                               // Random high ports
+];
 
 interface CdpPage {
     id: string;
     title: string;
     type: string;
-    webSocketDebuggerUrl?: string; // URL WebSocket để debug
+    webSocketDebuggerUrl?: string;
 }
 
 interface CdpConnection {
     ws: any;
     injected: boolean;
+    lastConfigHash?: string;
 }
 
 export class CdpService {
@@ -26,27 +31,20 @@ export class CdpService {
 
     constructor(private context: vscode.ExtensionContext) { }
 
-    /**
-     * Bắt đầu dịch vụ CDP Auto-Accept
-     */
     public async start() {
         if (this.isEnabled) return;
         this.isEnabled = true;
-        console.log('[CDP] Bắt đầu dịch vụ Auto-Accept qua CDP...');
+        console.log('[CDP] Starting Intelligent Engine...');
 
-        // Chạy ngay lập tức
         await this.scanAndConnect();
 
-        // Định kỳ quét lại (phòng trường hợp mở window mới hoặc reload)
+        // Scan every 45 seconds - Very low overhead
         this.pollTimer = setInterval(async () => {
             if (!this.isEnabled) return;
             await this.scanAndConnect();
-        }, 10000);
+        }, 45000);
     }
 
-    /**
-     * Dừng dịch vụ
-     */
     public async stop() {
         this.isEnabled = false;
         if (this.pollTimer) {
@@ -56,26 +54,18 @@ export class CdpService {
 
         for (const [id, conn] of this.connections) {
             try {
-                // Gửi lệnh dừng script bên trong browser
                 await this.evaluate(id, 'if(window.__autoAcceptStop) window.__autoAcceptStop()');
                 conn.ws.close();
-            } catch (e) {
-                console.error(`[CDP] Lỗi khi đóng kết nối ${id}:`, e);
-            }
+            } catch (e) { }
         }
         this.connections.clear();
-        console.log('[CDP] Đã dừng dịch vụ.');
     }
 
-    /**
-     * Quét các cổng debug và kết nối tới các trang
-     */
     private async scanAndConnect() {
-        for (let port = BASE_PORT; port <= BASE_PORT + PORT_RANGE; port++) {
+        for (const port of PORTS_TO_SCAN) {
             try {
                 const pages = await this.getPages(port);
                 for (const page of pages) {
-                    // Chỉ quan tâm đến page chính hoặc webview có thể chạy script
                     if (!page.webSocketDebuggerUrl) continue;
 
                     const id = `${port}:${page.id}`;
@@ -83,133 +73,109 @@ export class CdpService {
                         await this.connect(id, page.webSocketDebuggerUrl);
                     }
 
-                    // Inject script nếu chưa inject
                     await this.injectScript(id);
                 }
-            } catch (e) {
-                // Không log lỗi kết nối vì cổng có thể không mở (bình thường)
-            }
+            } catch (e) { }
         }
     }
 
-    /**
-     * Lấy danh sách tabs/pages từ debugger port
-     */
     private async getPages(port: number): Promise<CdpPage[]> {
         return new Promise((resolve) => {
-            const req = require('http').get({
-                hostname: '127.0.0.1',
-                port: port,
-                path: '/json/list',
-                timeout: 500
-            }, (res: any) => {
-                let data = '';
-                res.on('data', (chunk: any) => data += chunk);
-                res.on('end', () => {
-                    try {
-                        const pages = JSON.parse(data) as CdpPage[];
-                        resolve(pages.filter(p => p.type === 'page' || p.type === 'webview' || p.type === 'iframe'));
-                    } catch (e) {
-                        resolve([]);
-                    }
+            try {
+                const http = require('http');
+                const req = http.get({
+                    hostname: '127.0.0.1',
+                    port: port,
+                    path: '/json/list',
+                    timeout: 400 // Fast timeout
+                }, (res: any) => {
+                    let data = '';
+                    res.on('data', (chunk: any) => data += chunk);
+                    res.on('end', () => {
+                        try {
+                            const pages = JSON.parse(data) as CdpPage[];
+                            resolve(pages.filter(p => p.type === 'page' || p.type === 'webview' || p.type === 'iframe'));
+                        } catch (e) {
+                            resolve([]);
+                        }
+                    });
                 });
-            });
 
-            req.on('error', () => resolve([]));
-            req.on('timeout', () => {
-                req.destroy();
+                req.on('error', () => resolve([]));
+                req.on('timeout', () => {
+                    req.destroy();
+                    resolve([]);
+                });
+            } catch (e) {
                 resolve([]);
-            });
+            }
         });
     }
 
-    /**
-     * Kết nối WebSocket tới trang
-     */
     private connect(id: string, url: string): Promise<boolean> {
         return new Promise((resolve) => {
             try {
-                // Sử dụng require để tránh vấn đề import binding
                 const WebSocket = require('ws');
                 const ws = new WebSocket(url);
 
-                // Set timeout kết nối
                 const timeout = setTimeout(() => {
                     if (ws.readyState === WebSocket.CONNECTING) {
                         try { ws.terminate(); } catch (e) { }
                         resolve(false);
                     }
-                }, 1000);
+                }, 2000);
 
                 ws.on('open', () => {
                     clearTimeout(timeout);
                     this.connections.set(id, { ws, injected: false });
-                    console.log(`[CDP] Đã kết nối tới session ${id}`);
+                    console.log(`[CDP] Connected to ${id}`);
                     resolve(true);
                 });
 
-                ws.on('error', (err: any) => {
+                ws.on('error', () => {
                     clearTimeout(timeout);
-                    console.error(`[CDP] Lỗi kết nối ${id}:`, err.message);
                     resolve(false);
                 });
 
                 ws.on('close', () => {
                     this.connections.delete(id);
-                    console.log(`[CDP] Ngắt kết nối ${id}`);
                 });
             } catch (e) {
-                console.error(`[CDP] Exception khi kết nối ${id}:`, e);
                 resolve(false);
             }
         });
     }
 
-    /**
-     * Inject script Auto-Accept vào trang
-     */
     private async injectScript(id: string) {
         const conn = this.connections.get(id);
         if (!conn) return;
 
         try {
             if (!conn.injected) {
-                // Đọc script từ resources
                 const scriptPath = this.context.asAbsolutePath(path.join('resources', 'cdp-inject.js'));
-                if (!fs.existsSync(scriptPath)) {
-                    console.error('[CDP] Không tìm thấy file script tại:', scriptPath);
-                    return;
+                if (fs.existsSync(scriptPath)) {
+                    const scriptContent = fs.readFileSync(scriptPath, 'utf8');
+                    await this.evaluate(id, scriptContent);
+                    conn.injected = true;
                 }
-
-                const scriptContent = fs.readFileSync(scriptPath, 'utf8');
-                await this.evaluate(id, scriptContent);
-                conn.injected = true;
-                console.log(`[CDP] Inject thành công vào ${id}`);
             }
 
-            // Gửi cấu hình khởi động
-            const config = {
-                ide: 'antigravity',
-                isPro: true,
-                isBackgroundMode: true, // Chạy ngầm không cần overlay phiền phức
-                bannedCommands: ['rm -rf /', 'format c:'] // Bảo mật cơ bản
-            };
+            const config = { mode: 'passive' };
+            const configStr = JSON.stringify(config);
 
-            await this.evaluate(id, `if(window.__autoAcceptStart) window.__autoAcceptStart(${JSON.stringify(config)})`);
+            if (conn.lastConfigHash !== configStr) {
+                await this.evaluate(id, `if(window.__autoAcceptStart) window.__autoAcceptStart(${configStr})`);
+                conn.lastConfigHash = configStr;
+            }
 
         } catch (e) {
-            console.error(`[CDP] Inject thất bại cho ${id}:`, e);
-            // Reset flag để thử lại lần sau
             conn.injected = false;
         }
     }
 
-    /**
-     * Thực thi JS trong trang thông qua giao thức CDP Runtime.evaluate
-     */
     private evaluate(id: string, expression: string): Promise<any> {
         const conn = this.connections.get(id);
-        if (!conn || conn.ws.readyState !== 1) return Promise.reject('WebSocket not open');
+        if (!conn || conn.ws.readyState !== 1) return Promise.reject('WS unavailable');
 
         return new Promise((resolve, reject) => {
             const msgId = this.msgId++;
@@ -226,8 +192,8 @@ export class CdpService {
 
             const timeout = setTimeout(() => {
                 conn.ws.off('message', onMessage);
-                reject(new Error('CDP Timeout'));
-            }, 5000);
+                reject(new Error('Timeout'));
+            }, 6000);
 
             const onMessage = (data: any) => {
                 try {
@@ -235,15 +201,9 @@ export class CdpService {
                     if (response.id === msgId) {
                         clearTimeout(timeout);
                         conn.ws.off('message', onMessage);
-                        if (response.error) {
-                            reject(response.error);
-                        } else {
-                            resolve(response.result);
-                        }
+                        resolve(response.result);
                     }
-                } catch (e) {
-                    // Bỏ qua tin nhắn không phải JSON
-                }
+                } catch (e) { }
             };
 
             conn.ws.on('message', onMessage);
@@ -251,11 +211,8 @@ export class CdpService {
         });
     }
 
-    /**
-     * Kiểm tra xem cổng debug có mở không để cảnh báo người dùng
-     */
     public async isDebuggingEnabled(): Promise<boolean> {
-        for (let port = BASE_PORT; port <= BASE_PORT + PORT_RANGE; port++) {
+        for (const port of PORTS_TO_SCAN) {
             const pages = await this.getPages(port);
             if (pages.length > 0) return true;
         }
