@@ -117,13 +117,10 @@ export class AutomationService {
         // Kiểm tra xem debug port có hoạt động không
         const isCdpActive = await this.cdpService.isDebuggingEnabled();
         if (!isCdpActive) {
-            // Chỉ log cảnh báo, không làm phiền người dùng
             this.logService.addLog(LogLevel.Warning, 'CDP Debug Port không hoạt động. Chạy chế độ tương thích cơ bản.', 'Automation');
-        } else {
-            this.logService.addLog(LogLevel.Info, 'CDP Engine đã kích hoạt. Hiệu suất tối đa.', 'Automation');
         }
 
-        // 2. Chạy polling lệnh truyền thống (200ms)
+        // 2. Chạy polling lệnh truyền thống (1000ms - Optimized for smoothness)
         this.timer = setInterval(async () => {
             if (!this.isEnabled) return;
 
@@ -140,7 +137,7 @@ export class AutomationService {
                         if (activeEmail) {
                             const acc = this.accountService.getAccounts().find(a => a.name === activeEmail);
                             if (acc) {
-                                this.analyticsService.trackUsage(acc.id, 0, 1); // 0 tokens, 1 request
+                                this.analyticsService.trackUsage(acc.id, 0, 1);
                                 trackDone = true;
                             }
                         }
@@ -149,7 +146,7 @@ export class AutomationService {
                     // Bỏ qua lỗi
                 }
             }
-        }, 200);
+        }, 1000);
     }
 
     private async checkAndSwitchAccount() {

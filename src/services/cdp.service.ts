@@ -41,7 +41,7 @@ export class CdpService {
         this.pollTimer = setInterval(async () => {
             if (!this.isEnabled) return;
             await this.scanAndConnect();
-        }, 2000);
+        }, 10000);
     }
 
     /**
