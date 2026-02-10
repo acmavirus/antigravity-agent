@@ -10,65 +10,75 @@ import { NotificationService } from './services/notification.service';
 import { AnalyticsService } from './services/analytics.service';
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('Antigravity Agent is now active!');
+    try {
+        console.log('Antigravity Agent is activating...');
 
-    // Initialize Base Services
-    const logService = new LogService(context);
-    const notificationService = new NotificationService(context);
-    const analyticsService = new AnalyticsService(context);
-    const accountService = new AccountService(context);
+        // Initialize Base Services
+        const logService = new LogService(context);
+        const notificationService = new NotificationService(context);
+        const analyticsService = new AnalyticsService(context);
+        const accountService = new AccountService(context);
 
-    // Initialize Business Services
-    const quotaService = new QuotaService(context, accountService, logService, notificationService, analyticsService);
-    const schedulerService = new SchedulerService(context, quotaService, accountService, logService);
-    const automationService = new AutomationService(context, accountService, quotaService, logService, notificationService);
+        // Initialize Business Services
+        const quotaService = new QuotaService(context, accountService, logService, notificationService, analyticsService);
+        const schedulerService = new SchedulerService(context, quotaService, accountService, logService);
 
-    // Initialize UI Providers
-    const dashboardProvider = new DashboardProvider(context.extensionUri, quotaService, accountService, logService, analyticsService);
+        // Automation Service now has async initialization inside (non-blocking)
+        const automationService = new AutomationService(context, accountService, quotaService, logService, notificationService);
 
-    // Register Webview View
-    context.subscriptions.push(
-        vscode.window.registerWebviewViewProvider(
-            'antigravity-dashboard',
-            dashboardProvider
-        )
-    );
+        // Initialize UI Providers
+        const dashboardProvider = new DashboardProvider(context.extensionUri, quotaService, accountService, logService, analyticsService);
 
-    // Register Commands
-    context.subscriptions.push(
-        vscode.commands.registerCommand('antigravity.refreshQuota', () => {
-            quotaService.refreshAll();
-            vscode.window.showInformationMessage('Refreshing quotas...');
-        })
-    );
+        // Register Webview View
+        context.subscriptions.push(
+            vscode.window.registerWebviewViewProvider(
+                'antigravity-dashboard',
+                dashboardProvider
+            )
+        );
 
-    context.subscriptions.push(
-        vscode.commands.registerCommand('antigravity.addAccount', async () => {
-            const input = await vscode.window.showInputBox({
-                prompt: 'Enter account content (JSON or Key)',
-                placeHolder: '{"api_key": "..."}'
-            });
-            if (input) {
-                await accountService.addAccount(input);
-            }
-        })
-    );
+        // Register Commands
+        context.subscriptions.push(
+            vscode.commands.registerCommand('antigravity.refreshQuota', () => {
+                quotaService.refreshAll();
+                vscode.window.showInformationMessage('Refreshing quotas...');
+            })
+        );
 
-    context.subscriptions.push(
-        vscode.commands.registerCommand('antigravity.pinModel', () => {
-            quotaService.pinModel();
-        })
-    );
+        context.subscriptions.push(
+            vscode.commands.registerCommand('antigravity.addAccount', async () => {
+                const input = await vscode.window.showInputBox({
+                    prompt: 'Enter account content (JSON or Key)',
+                    placeHolder: '{"api_key": "..."}'
+                });
+                if (input) {
+                    await accountService.addAccount(input);
+                }
+            })
+        );
 
-    context.subscriptions.push(
-        vscode.commands.registerCommand('antigravity.toggleAutoAccept', () => {
-            automationService.toggle();
-        })
-    );
+        context.subscriptions.push(
+            vscode.commands.registerCommand('antigravity.pinModel', () => {
+                quotaService.pinModel();
+            })
+        );
 
-    // Initial load
-    quotaService.startMonitoring();
-    schedulerService.start();
+        context.subscriptions.push(
+            vscode.commands.registerCommand('antigravity.toggleAutoAccept', () => {
+                automationService.toggle();
+            })
+        );
+
+        // Initial load
+        // Run async tasks without awaiting effectively runs them in background
+        quotaService.startMonitoring().catch(err => console.error('Quota monitoring failed:', err));
+        schedulerService.start();
+
+        console.log('Antigravity Agent activation completed.');
+    } catch (e) {
+        console.error('Antigravity Agent failed to activate:', e);
+        vscode.window.showErrorMessage('Antigravity Agent failed to activate. Check console for details.');
+    }
 }
 
 export function deactivate() {

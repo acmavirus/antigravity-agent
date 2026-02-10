@@ -234,11 +234,16 @@ export class QuotaService {
         return [{ modelId: 'mock-1', displayName: 'Mock Gemini', used: 0, limit: 100, percent: 100, resetTime: "Never" }];
     }
 
-    public startMonitoring() {
+    public async startMonitoring() {
         // Mặc định 60 giây nếu không cấu hình
-        const interval = (vscode.workspace.getConfiguration('antigravity').get('updateInterval', 60) as number) * 1000;
-        setInterval(() => this.refreshAll(false), interval);
-        this.refreshAll(false);
+        const intervalSec = vscode.workspace.getConfiguration('antigravity').get('updateInterval', 60) as number;
+        const intervalMs = intervalSec * 1000;
+
+        // Chạy ngay lần đầu
+        await this.refreshAll(false);
+
+        // Sau đó chạy định kỳ
+        setInterval(() => this.refreshAll(false), intervalMs);
     }
 
     private updateStatusBar(quotas: ModelQuota[]) {

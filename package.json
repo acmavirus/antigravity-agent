@@ -4,6 +4,10 @@
     "description": "Manage Accounts, Monitor Quotas & Automate AI Intelligence Activation.",
     "version": "1.0.0",
     "publisher": "AcmaTvirus",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/AcmaTvirus/antigravity-agent"
+    },
     "icon": "resources/logo.png",
     "engines": {
         "vscode": "^1.80.0"

@@ -1,7 +1,5 @@
 // Copyright by AcmaTvirus
 import * as vscode from 'vscode';
-import WebSocket = require('ws');
-import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -16,7 +14,7 @@ interface CdpPage {
 }
 
 interface CdpConnection {
-    ws: WebSocket;
+    ws: any;
     injected: boolean;
 }
 
@@ -98,17 +96,31 @@ export class CdpService {
      * Lấy danh sách tabs/pages từ debugger port
      */
     private async getPages(port: number): Promise<CdpPage[]> {
-        try {
-            const response = await axios.get(`http://127.0.0.1:${port}/json/list`, {
+        return new Promise((resolve) => {
+            const req = require('http').get({
+                hostname: '127.0.0.1',
+                port: port,
+                path: '/json/list',
                 timeout: 500
+            }, (res: any) => {
+                let data = '';
+                res.on('data', (chunk: any) => data += chunk);
+                res.on('end', () => {
+                    try {
+                        const pages = JSON.parse(data) as CdpPage[];
+                        resolve(pages.filter(p => p.type === 'page' || p.type === 'webview' || p.type === 'iframe'));
+                    } catch (e) {
+                        resolve([]);
+                    }
+                });
             });
-            // Lọc ra các page/webview
-            return (response.data as CdpPage[]).filter(p =>
-                p.type === 'page' || p.type === 'webview' || p.type === 'iframe'
-            );
-        } catch (e) {
-            return [];
-        }
+
+            req.on('error', () => resolve([]));
+            req.on('timeout', () => {
+                req.destroy();
+                resolve([]);
+            });
+        });
     }
 
     /**
@@ -117,15 +129,28 @@ export class CdpService {
     private connect(id: string, url: string): Promise<boolean> {
         return new Promise((resolve) => {
             try {
+                // Sử dụng require để tránh vấn đề import binding
+                const WebSocket = require('ws');
                 const ws = new WebSocket(url);
+
+                // Set timeout kết nối
+                const timeout = setTimeout(() => {
+                    if (ws.readyState === WebSocket.CONNECTING) {
+                        try { ws.terminate(); } catch (e) { }
+                        resolve(false);
+                    }
+                }, 1000);
+
                 ws.on('open', () => {
+                    clearTimeout(timeout);
                     this.connections.set(id, { ws, injected: false });
                     console.log(`[CDP] Đã kết nối tới session ${id}`);
                     resolve(true);
                 });
 
-                ws.on('error', (err) => {
-                    console.error(`[CDP] Lỗi kết nối ${id}:`, err);
+                ws.on('error', (err: any) => {
+                    clearTimeout(timeout);
+                    console.error(`[CDP] Lỗi kết nối ${id}:`, err.message);
                     resolve(false);
                 });
 
@@ -134,6 +159,7 @@ export class CdpService {
                     console.log(`[CDP] Ngắt kết nối ${id}`);
                 });
             } catch (e) {
+                console.error(`[CDP] Exception khi kết nối ${id}:`, e);
                 resolve(false);
             }
         });
@@ -183,7 +209,7 @@ export class CdpService {
      */
     private evaluate(id: string, expression: string): Promise<any> {
         const conn = this.connections.get(id);
-        if (!conn || conn.ws.readyState !== WebSocket.OPEN) return Promise.reject('WebSocket not open');
+        if (!conn || conn.ws.readyState !== 1) return Promise.reject('WebSocket not open');
 
         return new Promise((resolve, reject) => {
             const msgId = this.msgId++;
@@ -203,7 +229,7 @@ export class CdpService {
                 reject(new Error('CDP Timeout'));
             }, 5000);
 
-            const onMessage = (data: WebSocket.Data) => {
+            const onMessage = (data: any) => {
                 try {
                     const response = JSON.parse(data.toString());
                     if (response.id === msgId) {
