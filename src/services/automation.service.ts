@@ -1,9 +1,13 @@
+// Copyright by AcmaTvirus
 import * as vscode from 'vscode';
 import { AccountService } from './account.service';
 import { QuotaService } from './quota.service';
 import { LogService, LogLevel } from './log.service';
 import { NotificationService } from './notification.service';
 
+/**
+ * Dịch vụ tự động hóa - Chịu trách nhiệm tự động nhấn "Accept" cho các bước thực thi
+ */
 export class AutomationService {
     private isEnabled: boolean = true;
     private statusBarItem: vscode.StatusBarItem;
@@ -17,11 +21,11 @@ export class AutomationService {
         private logService: LogService,
         private notificationService: NotificationService
     ) {
-        // Khởi tạo Status Bar Item
+        // Khởi tạo mục hiển thị trên thanh trạng thái
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         this.statusBarItem.command = 'antigravity.toggleAutoAccept';
 
-        // Load cấu hình
+        // Tải trạng thái và danh sách lệnh từ bộ nhớ
         this.isEnabled = this.context.globalState.get<boolean>('autoAcceptEnabled', true);
         this.customCommands = this.context.globalState.get<string[]>('customAutoCommands', [
             'antigravity.step.accept',
@@ -45,6 +49,9 @@ export class AutomationService {
         }
     }
 
+    /**
+     * Bật/Tắt chế độ tự động chấp nhận hoàn toàn
+     */
     public toggle() {
         this.isEnabled = !this.isEnabled;
         this.context.globalState.update('autoAcceptEnabled', this.isEnabled);
@@ -52,12 +59,12 @@ export class AutomationService {
 
         if (this.isEnabled) {
             this.startAutomating();
-            this.notificationService.notify('Antigravity Auto-Accept: ON');
-            this.logService.addLog(LogLevel.Info, 'Enable auto-accept mode', 'Automation');
+            this.notificationService.notify('Antigravity Auto-Accept: ĐÃ BẬT (Bao gồm SSH)');
+            this.logService.addLog(LogLevel.Info, 'Đã bật chế độ tự động chấp nhận tất cả', 'Automation');
         } else {
             this.stopAutomating();
-            this.notificationService.notify('Antigravity Auto-Accept: OFF', 'warn');
-            this.logService.addLog(LogLevel.Warning, 'Disable auto-accept mode', 'Automation');
+            this.notificationService.notify('Antigravity Auto-Accept: ĐÃ TẮT', 'warn');
+            this.logService.addLog(LogLevel.Warning, 'Đã tắt chế độ tự động chấp nhận', 'Automation');
         }
     }
 
@@ -71,24 +78,32 @@ export class AutomationService {
         }
     }
 
+    /**
+     * Bắt đầu vòng lặp tự động hóa
+     */
     private startAutomating() {
         if (this.timer) return;
 
+        // Tần suất kiểm tra: 1 giây để đảm bảo phản hồi nhanh nhất
         this.timer = setInterval(async () => {
             if (!this.isEnabled) return;
 
-            // 1. Kiểm tra Quota và tự động chuyển tài khoản
+            // 1. Kiểm tra Quota và tự động chuyển đổi tài khoản
             await this.checkAndSwitchAccount();
 
-            // 2. Thực thi các lệnh Auto-Accept
+            // 2. Duyệt và thực thi tất cả các lệnh chấp nhận (bao gồm cả các bước chứa SSH)
             for (const cmd of this.customCommands) {
                 try {
+                    // Thực thi lệnh không cần kiểm tra nội dung để đảm bảo tính tự động hoàn toàn
                     await vscode.commands.executeCommand(cmd);
                 } catch (e) { }
             }
-        }, 2000); // Tăng lên 2s để tránh quá tải
+        }, 1000);
     }
 
+    /**
+     * Tự động kiểm tra và chuyển tài khoản khi hết Quota (dưới 1%)
+     */
     private async checkAndSwitchAccount() {
         const activeEmail = await this.accountService.getActiveEmail();
         const accounts = this.accountService.getAccounts();
@@ -96,11 +111,9 @@ export class AutomationService {
 
         if (currentAccount) {
             const quotas = this.quotaService.getCachedQuotas(currentAccount.id);
-            // Nếu model đầu tiên hết quota (dưới 1%)
             if (quotas && quotas.length > 0 && (quotas[0].percent || 0) < 1) {
-                this.logService.addLog(LogLevel.Warning, `Account ${activeEmail} is out of quota. Searching for replacement...`, 'Automation');
+                this.logService.addLog(LogLevel.Warning, `Tài khoản ${activeEmail} hết quota. Đang tìm tài khoản thay thế...`, 'Automation');
 
-                // Tìm tài khoản khác còn quota
                 const replacement = accounts.find(a => {
                     if (a.id === currentAccount.id) return false;
                     const q = this.quotaService.getCachedQuotas(a.id);
@@ -109,15 +122,16 @@ export class AutomationService {
 
                 if (replacement) {
                     await this.accountService.switchAccount(replacement.id);
-                    this.logService.addLog(LogLevel.Success, `Automatically switched to account: ${replacement.name}`, 'Automation');
-                    this.notificationService.notify(`Switched to ${replacement.name} because the old account is out of quota.`);
-                } else {
-                    this.notificationService.notify('All accounts are out of quota!', 'error');
+                    this.logService.addLog(LogLevel.Success, `Đã tự động chuyển sang: ${replacement.name}`, 'Automation');
+                    this.notificationService.notify(`Đã chuyển sang ${replacement.name} do hết quota.`);
                 }
             }
         }
     }
 
+    /**
+     * Dừng vòng lặp tự động hóa
+     */
     private stopAutomating() {
         if (this.timer) {
             clearInterval(this.timer);
@@ -125,3 +139,4 @@ export class AutomationService {
         }
     }
 }
+

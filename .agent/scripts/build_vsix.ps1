@@ -1,7 +1,7 @@
 # Copyright by AcmaTvirus
 # Script để build VSIX cho Antigravity Agent
 
-$projectRoot = "d:\DATA-SOURCE-ZIP\antigravity-agent"
+$projectRoot = "c:\Users\Administrator\Desktop\antigravity-agent"
 Set-Location -Path $projectRoot
 
 Write-Host "Đang kiểm tra dependencies..." -ForegroundColor Cyan
