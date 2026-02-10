@@ -1,13 +1,16 @@
-// Copyright by AcmaTvirus
 import * as vscode from 'vscode';
 import { QuotaService } from '../services/quota.service';
 import { AccountService } from '../services/account.service';
+import { LogService } from '../services/log.service';
+import { AnalyticsService } from '../services/analytics.service';
 
 export class DashboardProvider implements vscode.WebviewViewProvider {
     constructor(
         private readonly extensionUri: vscode.Uri,
         private readonly quotaService: QuotaService,
-        private readonly accountService: AccountService
+        private readonly accountService: AccountService,
+        private readonly logService: LogService,
+        private readonly analyticsService: AnalyticsService
     ) { }
 
     public resolveWebviewView(
@@ -44,7 +47,16 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                     await this.accountService.switchAccount(data.id);
                     await this.updateWebview(webviewView);
                     break;
+                case 'clearLogs':
+                    await this.logService.clearLogs();
+                    await this.updateWebview(webviewView);
+                    break;
             }
+        });
+
+        // Lắng nghe sự thay đổi của Log
+        this.logService.onDidChangeLogs(() => {
+            this.updateWebview(webviewView);
         });
 
         // Initial update
@@ -62,7 +74,15 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
             quotas: this.quotaService.getCachedQuotas(acc.id) || []
         })).sort((a, b) => (b.isActive ? 1 : 0) - (a.isActive ? 1 : 0));
 
-        webviewView.webview.postMessage({ type: 'update', accounts });
+        const logs = this.logService.getLogs();
+        const analytics = this.analyticsService.getUsageHistory();
+
+        webviewView.webview.postMessage({
+            type: 'update',
+            accounts,
+            logs,
+            analytics
+        });
     }
 
     private _getHtmlForWebview(webview: vscode.Webview) {
@@ -94,12 +114,57 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
             </div>
         </header>
 
+        <nav class="tabs">
+            <button class="tab-item active" data-tab="accounts">Accounts</button>
+            <button class="tab-item" data-tab="analytics">Analytics</button>
+            <button class="tab-item" data-tab="logs">Logs</button>
+        </nav>
+
+        <main id="tab-content">
+            <!-- ACCOUNT TAB -->
+            <div id="accounts-tab" class="tab-pane active">
+                <div id="account-list" class="account-grid">
+                    <div class="loading">Đang tải dữ liệu...</div>
+                </div>
+            </div>
+
+            <!-- ANALYTICS TAB -->
+            <div id="analytics-tab" class="tab-pane">
+                <div class="analytics-container">
+                    <h3>Thống kê sử dụng (7 ngày)</h3>
+                    <div id="analytics-chart" class="chart-container">
+                        <!-- Chart will be injected here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- LOGS TAB -->
+            <div id="logs-tab" class="tab-pane">
+                <div class="logs-header">
+                    <h3>Hoạt động hệ thống</h3>
+                    <button id="clearLogsBtn" title="Xóa log"><i class="codicon codicon-trash"></i></button>
+                </div>
+                <div id="log-list" class="log-timeline">
+                    <!-- Logs will be injected here -->
+                </div>
+            </div>
+        </main>
+
         <div id="settings-panel" class="settings-panel hidden">
             <div class="settings-header">
-                <h3>Tùy chỉnh giao diện</h3>
+                <h3>Cấu hình nâng cao</h3>
                 <button id="closeSettingsBtn"><i class="codicon codicon-close"></i></button>
             </div>
             <div class="settings-content">
+                <div class="setting-group">
+                    <label>Telegram Token</label>
+                    <input type="password" id="tgToken" placeholder="Bot token...">
+                </div>
+                <div class="setting-group">
+                    <label>Telegram Chat ID</label>
+                    <input type="text" id="tgChatId" placeholder="Chat ID...">
+                </div>
+                <hr>
                 <div class="setting-group">
                     <label>Chủ đề</label>
                     <div class="theme-options">
@@ -116,27 +181,9 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                         <button class="color-opt" data-color="#10b981" style="background: #10b981;"></button>
                         <button class="color-opt" data-color="#f59e0b" style="background: #f59e0b;"></button>
                         <button class="color-opt" data-color="#ef4444" style="background: #ef4444;"></button>
-                        <button class="color-opt" data-color="#818cf8" style="background: #818cf8;"></button>
-                        <button class="color-opt" data-color="#f472b6" style="background: #f472b6;"></button>
                     </div>
                 </div>
-                <div class="setting-group">
-                    <label>Chế độ hiển thị</label>
-                    <select id="layoutSelect">
-                        <option value="comfortable">Thoải mái</option>
-                        <option value="compact">Gọn gàng</option>
-                    </select>
-                </div>
-                <div class="setting-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="glassEffect" checked> Hiệu ứng kính (Glassmorphism)
-                    </label>
-                </div>
             </div>
-        </div>
-        
-        <div id="account-list" class="account-grid">
-            <!-- Dynamic Content -->
         </div>
     </div>
     <script src="${scriptUri}"></script>

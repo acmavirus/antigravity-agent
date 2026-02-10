@@ -14,6 +14,20 @@ export enum AccountStatus {
     Unknown = 'unknown'
 }
 
+export interface ProxyConfig {
+    enabled: boolean;
+    host: string;
+    port: number;
+    username?: string;
+    password?: string;
+}
+
+export interface UsageStats {
+    totalRequests: number;
+    totalTokens: number;
+    history: { timestamp: number; requests: number; tokens: number }[];
+}
+
 export interface Account {
     id: string;
     name: string;
@@ -21,6 +35,12 @@ export interface Account {
     data: any;
     status: AccountStatus;
     lastChecked: number;
+    proxy?: ProxyConfig;
+    stats?: UsageStats;
+    automationSettings?: {
+        autoSwitchThreshold: number; // Tỉ lệ % còn lại để tự động chuyển (vd: 5%)
+        excludeCommands?: string[];
+    };
 }
 
 export class AccountService {

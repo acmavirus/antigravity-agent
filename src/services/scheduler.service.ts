@@ -4,13 +4,16 @@ import * as cron from 'node-cron';
 import { QuotaService, ModelQuota } from './quota.service';
 import { AccountService } from './account.service';
 
+import { LogService, LogLevel } from './log.service';
+
 export class SchedulerService {
     private processedResets: Set<string> = new Set();
 
     constructor(
         private context: vscode.ExtensionContext,
         private quotaService: QuotaService,
-        private accountService: AccountService
+        private accountService: AccountService,
+        private logService: LogService
     ) { }
 
     public start() {
@@ -77,7 +80,7 @@ export class SchedulerService {
                     this.processedResets.add(resetKey);
                     wakeUpCount++;
 
-                    this.logHistory(account.name, model.displayName, `Kích hoạt tự động thành công: ${model.resetTime}`);
+                    this.logService.addLog(LogLevel.Success, `Kích hoạt tự động thành công: ${model.displayName} (${model.resetTime})`, 'Scheduler');
 
                     // Giới hạn chỉ log 1 lần cho mỗi đợt quét của tài khoản
                     break;
@@ -124,17 +127,5 @@ export class SchedulerService {
         } catch (e) {
             return false;
         }
-    }
-
-    private async logHistory(account: string, model: string, message: string) {
-        const history = this.context.globalState.get<any[]>('antigravity.wakeUpHistory') || [];
-        history.push({
-            timestamp: Date.now(),
-            account,
-            model,
-            status: 'success',
-            message
-        });
-        await this.context.globalState.update('antigravity.wakeUpHistory', history.slice(-50));
     }
 }

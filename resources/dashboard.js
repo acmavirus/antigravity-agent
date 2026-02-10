@@ -7,6 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
         switch (message.type) {
             case 'update':
                 renderAccounts(message.accounts);
+                renderLogs(message.logs);
+                renderAnalytics(message.analytics);
                 break;
         }
     });
@@ -16,14 +18,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const autoImportBtn = document.getElementById('autoImportBtn');
     const settingsBtn = document.getElementById('settingsBtn');
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+    const clearLogsBtn = document.getElementById('clearLogsBtn');
     const settingsPanel = document.getElementById('settings-panel');
 
     // UI Configuration State
     let config = vscode.getState() || {
         theme: 'auto',
         accentColor: '#38bdf8',
-        layout: 'comfortable',
-        glassEffect: true,
+        activeTab: 'accounts',
         collapsedAccounts: []
     };
 
@@ -37,10 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Apply Theme
         document.body.className = '';
         if (config.theme !== 'auto') document.body.classList.add(`theme-${config.theme}`);
-        if (!config.glassEffect) document.body.classList.add('no-glass');
-        if (config.layout === 'compact') document.body.classList.add('layout-compact');
 
-        // Apply Accent Color - Only override if not 'auto' theme or if manually set
+        // Apply Accent Color
         if (config.theme !== 'auto') {
             document.documentElement.style.setProperty('--accent', config.accentColor);
             document.documentElement.style.setProperty('--accent-glow', config.accentColor + '4d');
@@ -49,6 +49,14 @@ document.addEventListener('DOMContentLoaded', () => {
             document.documentElement.style.removeProperty('--accent-glow');
         }
 
+        // Update Tabs UI
+        document.querySelectorAll('.tab-item').forEach(tab => {
+            const isActive = tab.dataset.tab === config.activeTab;
+            tab.classList.toggle('active', isActive);
+            const pane = document.getElementById(`${tab.dataset.tab}-tab`);
+            if (pane) pane.classList.toggle('active', isActive);
+        });
+
         // Update Settings UI
         document.querySelectorAll('.theme-opt').forEach(opt => {
             opt.classList.toggle('active', opt.dataset.theme === config.theme);
@@ -56,8 +64,19 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.color-opt').forEach(opt => {
             opt.classList.toggle('active', opt.dataset.color === config.accentColor);
         });
-        document.getElementById('layoutSelect').value = config.layout;
-        document.getElementById('glassEffect').checked = config.glassEffect;
+    }
+
+    // Tab Switching
+    document.querySelectorAll('.tab-item').forEach(tab => {
+        tab.addEventListener('click', () => {
+            applyConfig({ activeTab: tab.dataset.tab });
+        });
+    });
+
+    if (clearLogsBtn) {
+        clearLogsBtn.addEventListener('click', () => {
+            vscode.postMessage({ type: 'clearLogs' });
+        });
     }
 
     // Settings Panel Event Listeners
@@ -79,14 +98,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.querySelectorAll('.color-opt').forEach(opt => {
         opt.addEventListener('click', () => applyConfig({ accentColor: opt.dataset.color }));
-    });
-
-    document.getElementById('layoutSelect').addEventListener('change', (e) => {
-        applyConfig({ layout: e.target.value });
-    });
-
-    document.getElementById('glassEffect').addEventListener('change', (e) => {
-        applyConfig({ glassEffect: e.target.checked });
     });
 
     // Lưu trữ trạng thái thu gọn của các card
@@ -203,5 +214,47 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             container.appendChild(card);
         });
+    }
+
+    function renderLogs(logs) {
+        const container = document.getElementById('log-list');
+        if (!container || !logs) return;
+
+        if (logs.length === 0) {
+            container.innerHTML = '<div class="empty-state">Chưa có hoạt động nào.</div>';
+            return;
+        }
+
+        container.innerHTML = logs.map(log => `
+            <div class="log-entry level-${log.level}">
+                <span class="log-time">${new Date(log.timestamp).toLocaleTimeString()}</span>
+                <div class="log-msg">
+                    <span class="log-source">[${log.source}]</span>
+                    ${log.message}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function renderAnalytics(data) {
+        const container = document.getElementById('analytics-chart');
+        if (!container || !data) return;
+
+        if (data.length === 0) {
+            container.innerHTML = '<div class="empty-state">Chưa có dữ liệu thống kê.</div>';
+            return;
+        }
+
+        const maxTokens = Math.max(...data.map(d => d.tokens), 1);
+
+        container.innerHTML = data.map(d => {
+            const height = (d.tokens / maxTokens) * 100;
+            return `
+                <div class="bar-wrapper" title="${d.date}: ${d.tokens} tokens">
+                    <div class="bar" style="height: ${height}%"></div>
+                    <span class="bar-label">${d.date.split('/')[0]}/${d.date.split('/')[1]}</span>
+                </div>
+            `;
+        }).join('');
     }
 });

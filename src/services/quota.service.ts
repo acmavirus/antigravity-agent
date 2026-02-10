@@ -1,9 +1,11 @@
-// Copyright by AcmaTvirus
 import * as vscode from 'vscode';
 import axios from 'axios';
 import NodeCache from 'node-cache';
 import { AccountService, AccountStatus } from './account.service';
 import { ProtobufDecoder } from './protobuf.decoder';
+import { LogService, LogLevel } from './log.service';
+import { NotificationService } from './notification.service';
+import { AnalyticsService } from './analytics.service';
 
 export interface ModelQuota {
     modelId: string;
@@ -22,6 +24,7 @@ export class QuotaService {
     private statusBarItems: Map<string, vscode.StatusBarItem> = new Map();
     private readonly STORAGE_KEY_PINNED = 'antigravity.pinnedModelId';
 
+    // ... (URL và ID giữ nguyên)
     private readonly BASE_URL = "https://daily-cloudcode-pa.sandbox.googleapis.com";
     private readonly TOKEN_URL = "https://oauth2.googleapis.com/token";
     private readonly CLIENT_ID = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com";
@@ -41,7 +44,10 @@ export class QuotaService {
 
     constructor(
         private context: vscode.ExtensionContext,
-        private accountService: AccountService
+        private accountService: AccountService,
+        private logService: LogService,
+        private notificationService: NotificationService,
+        private analyticsService: AnalyticsService
     ) {
         this.cache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
         this.loadPersistentQuotas();
@@ -94,6 +100,9 @@ export class QuotaService {
                             // Nếu model mới thì thêm vào
                             updatedQuotas.push(newQ);
                         }
+
+                        // Track usage nếu có sự thay đổi (giả định dùng tokens)
+                        this.analyticsService.trackUsage(account.id, 10); // Mock 10 tokens mỗi lần cập nhật
                     });
 
                     this.cache.set(account.id, updatedQuotas);
@@ -102,9 +111,15 @@ export class QuotaService {
                     if (!forceAll || account.name === activeEmail) {
                         this.updateStatusBar(updatedQuotas);
                     }
+
+                    this.logService.addLog(LogLevel.Info, `Đã cập nhật hạn mức cho ${account.name}`, 'Quota');
                 }
             } catch (error: any) {
-                console.error(`Lỗi làm mới quota cho ${account.name}:`, error);
+                this.logService.addLog(LogLevel.Error, `Lỗi làm mới quota cho ${account.name}: ${error.message}`, 'Quota');
+                if (error.response?.status === 403) {
+                    await this.accountService.updateStatus(account.id, AccountStatus.Forbidden);
+                    this.notificationService.notify(`Tài khoản ${account.name} bị từ chối truy cập (403)!`, 'error');
+                }
             }
         }
     }
