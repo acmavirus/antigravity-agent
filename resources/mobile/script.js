@@ -21,7 +21,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const content = document.getElementById(`${tabName}-tab`);
         if (content) content.classList.add('active');
 
-        // Toggle mobile tabs visibility
         if (tabName === 'live') {
             document.body.classList.add('live-view-active');
         } else {
@@ -30,12 +29,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Back button logic for Live View
     document.querySelector('.back-to-mon').addEventListener('click', () => {
         switchTab('monitor');
     });
 
-    // Fetch Data
     async function fetchData() {
         try {
             const res = await fetch('/api/status');
@@ -52,22 +49,23 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderAll() {
         if (!currentData) return;
 
-        // Header and Stats
         document.getElementById('connection-status').innerText = 'LIVE';
         document.getElementById('live-dot').style.backgroundColor = 'var(--success)';
         document.getElementById('active-sessions-count').innerText = currentData.monitor.filter(m => m.connected).length;
 
-        // Render Public URL
+        // Render Tunnel Area
         const tunnelArea = document.getElementById('tunnel-area');
         const urlInput = document.getElementById('public-url-input');
+        const passInput = document.getElementById('tunnel-pass-input');
+
         if (currentData.publicUrl) {
             tunnelArea.style.display = 'flex';
             urlInput.value = currentData.publicUrl;
+            passInput.value = currentData.tunnelPassword || 'Đang lấy...';
         } else {
             tunnelArea.style.display = 'none';
         }
 
-        // Render Accounts
         const accList = document.getElementById('account-list');
         accList.innerHTML = currentData.accounts.map(acc => `
             <div class="acc-card ${acc.isActive ? 'active' : ''}" onclick="switchAccount('${acc.id}')">
@@ -94,7 +92,6 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `).join('');
 
-        // Calculate Quota Health
         const activeAcc = currentData.accounts.find(a => a.isActive);
         if (activeAcc && activeAcc.quotas.length > 0) {
             const avg = Math.round(activeAcc.quotas.reduce((acc, curr) => acc + curr.percent, 0) / activeAcc.quotas.length);
@@ -103,7 +100,6 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('quota-health-pct').innerText = '--%';
         }
 
-        // Render Monitor
         const monList = document.getElementById('monitor-list');
         if (currentData.monitor.length === 0) {
             monList.innerHTML = '<div class="acc-card">Không tìm thấy phiên làm việc nào.</div>';
@@ -118,7 +114,6 @@ document.addEventListener('DOMContentLoaded', () => {
             `).join('');
         }
 
-        // Render Analytics
         const chart = document.getElementById('analytics-chart');
         if (currentData.analytics && currentData.analytics.length > 0) {
             const max = Math.max(...currentData.analytics.map(a => a.tokens), 1);
@@ -128,7 +123,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }).join('');
         }
 
-        // Render Logs
         const logCont = document.querySelector('.log-container');
         logCont.innerHTML = (currentData.logs || []).map(log => `
             <div class="log-item">
@@ -138,26 +132,65 @@ document.addEventListener('DOMContentLoaded', () => {
         `).join('');
     }
 
-    // Copy URL Logic
-    document.getElementById('copy-url-btn').onclick = () => {
-        const urlInput = document.getElementById('public-url-input');
-        urlInput.select();
+    // Copy Helper
+    function copyToClipboard(inputEl, btnId) {
+        inputEl.select();
         document.execCommand('copy');
 
-        const btn = document.getElementById('copy-url-btn');
+        const btn = document.getElementById(btnId);
         const icon = btn.querySelector('i');
+        const oldClass = icon.className;
+
         icon.className = 'fas fa-check';
         btn.style.borderColor = 'var(--success)';
         btn.style.color = 'var(--success)';
 
         setTimeout(() => {
-            icon.className = 'fas fa-copy';
+            icon.className = oldClass;
             btn.style.borderColor = '';
             btn.style.color = '';
         }, 2000);
+    }
+
+    document.getElementById('copy-url-btn').onclick = () => {
+        const urlInput = document.getElementById('public-url-input');
+        copyToClipboard(urlInput, 'copy-url-btn');
+    };
+
+    document.getElementById('copy-pass-btn').onclick = () => {
+        const passInput = document.getElementById('tunnel-pass-input');
+        copyToClipboard(passInput, 'copy-pass-btn');
     };
 
     // Live View Logic
+    document.getElementById('toggle-expand-btn').onclick = () => {
+        const container = document.getElementById('stream-container');
+        const icon = document.querySelector('#toggle-expand-btn i');
+        container.classList.toggle('expanded');
+
+        if (container.classList.contains('expanded')) {
+            icon.className = 'fas fa-compress';
+        } else {
+            icon.className = 'fas fa-expand';
+        }
+    };
+
+    // Focus Mode Logic
+    document.querySelectorAll('.focus-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const focus = btn.dataset.focus;
+            const img = document.getElementById('stream-img');
+
+            // Update buttons
+            document.querySelectorAll('.focus-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // Update image class
+            img.className = '';
+            img.classList.add(`focus-${focus}`);
+        });
+    });
+
     window.startLiveView = (id) => {
         activeTargetId = id;
         switchTab('live');
@@ -219,7 +252,6 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchData();
     };
 
-    // Auto Refresh
     setInterval(fetchData, 5000);
     fetchData();
 });

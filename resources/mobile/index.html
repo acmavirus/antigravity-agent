@@ -77,6 +77,13 @@
                         <input type="text" id="public-url-input" readonly>
                         <button id="copy-url-btn" class="icon-btn"><i class="fas fa-copy"></i></button>
                     </div>
+                    <div id="pass-area" style="margin-top: 10px;">
+                        <span class="label">Tunnel Pass (IP):</span>
+                        <div class="url-input-group">
+                            <input type="text" id="tunnel-pass-input" readonly>
+                            <button id="copy-pass-btn" class="icon-btn"><i class="fas fa-key"></i></button>
+                        </div>
+                    </div>
                 </div>
                 <div id="monitor-list" class="list-container">
                     <!-- Monitor items -->
@@ -104,9 +111,23 @@
                     <button class="back-to-mon icon-btn"><i class="fas fa-chevron-left"></i></button>
                 </div>
 
-                <div class="live-streaming-container">
-                    <img id="stream-img" src="" alt="Live Stream">
+                <div class="live-streaming-container" id="stream-container">
+                    <img id="stream-img" src="" alt="Live Stream" class="focus-full">
                     <div class="stream-overlay">LIVE STREAMING</div>
+                    <button id="toggle-expand-btn" class="expand-btn"><i class="fas fa-expand"></i></button>
+                </div>
+
+                <div class="focus-controls">
+                    <button class="focus-btn active" data-focus="full" title="Toàn bộ"><i
+                            class="fas fa-compress-arrows-alt"></i></button>
+                    <button class="focus-btn" data-focus="left" title="Bên trái"><i
+                            class="fas fa-align-left"></i></button>
+                    <button class="focus-btn" data-focus="right" title="Bên phải"><i
+                            class="fas fa-align-right"></i></button>
+                    <button class="focus-btn" data-focus="top" title="Phía trên"><i
+                            class="fas fa-arrow-up"></i></button>
+                    <button class="focus-btn" data-focus="bottom" title="Phía dưới"><i
+                            class="fas fa-arrow-down"></i></button>
                 </div>
 
                 <div class="live-controls">

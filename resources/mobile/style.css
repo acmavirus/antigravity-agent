@@ -433,18 +433,47 @@ header {
 .live-streaming-container {
     width: 100%;
     aspect-ratio: 16/10;
+    min-height: 250px;
     background: #000;
     border-radius: 16px;
     overflow: hidden;
     position: relative;
     border: 1px solid var(--glass-border);
     margin-bottom: 20px;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.live-streaming-container.expanded {
+    aspect-ratio: auto;
+    height: 60vh;
 }
 
 #stream-img {
     width: 100%;
     height: 100%;
     object-fit: contain;
+    transition: object-fit 0.3s;
+}
+
+.live-streaming-container.expanded #stream-img {
+    object-fit: contain;
+}
+
+.expand-btn {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(5px);
+    z-index: 10;
 }
 
 .stream-overlay {
@@ -457,6 +486,58 @@ header {
     padding: 2px 6px;
     border-radius: 4px;
     font-weight: 800;
+}
+
+/* Focus Controls */
+.focus-controls {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 20px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+}
+
+.focus-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    padding: 5px 10px;
+    transition: all 0.3s;
+}
+
+.focus-btn.active {
+    color: var(--accent);
+    transform: scale(1.2);
+}
+
+/* Photo Focus Modes */
+#stream-img.focus-full {
+    object-fit: contain;
+    object-position: center;
+}
+
+#stream-img.focus-left {
+    object-fit: cover;
+    object-position: left center;
+}
+
+#stream-img.focus-right {
+    object-fit: cover;
+    object-position: right center;
+}
+
+#stream-img.focus-top {
+    object-fit: cover;
+    object-position: center top;
+}
+
+#stream-img.focus-bottom {
+    object-fit: cover;
+    object-position: center bottom;
 }
 
 .live-controls {

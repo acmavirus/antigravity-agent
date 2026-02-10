@@ -4,6 +4,7 @@ import express from 'express';
 import * as path from 'path';
 import { Server } from 'http';
 import localtunnel from 'localtunnel';
+import axios from 'axios';
 import { AccountService } from './account.service';
 import { QuotaService } from './quota.service';
 import { LogService, LogLevel } from './log.service';
@@ -18,6 +19,7 @@ export class WebServerService {
     private server: Server | null = null;
     private tunnel: localtunnel.Tunnel | null = null;
     private publicUrl: string | null = null;
+    private tunnelPassword: string | null = null;
     private readonly PORT = 3001;
 
     constructor(
@@ -61,6 +63,7 @@ export class WebServerService {
                 accounts,
                 monitor: monitorInfo,
                 publicUrl: this.publicUrl,
+                tunnelPassword: this.tunnelPassword,
                 logs: this.logService.getLogs().slice(-20),
                 analytics: this.analyticsService.getUsageHistory(),
                 timestamp: new Date().toISOString()
@@ -143,12 +146,18 @@ export class WebServerService {
                 console.log(`[WebServer] Mobile Dashboard running at ${localUrl}`);
                 this.logService.addLog(LogLevel.Info, `Mobile Dashboard started at port ${this.PORT}`, 'WebServer');
 
+                // Lấy Tunnel Password (Public IP)
+                try {
+                    const res = await axios.get('https://loca.lt/mytunnelpassword');
+                    this.tunnelPassword = res.data.trim();
+                } catch (e) { }
+
                 // Khởi tạo Tunnel (Truy cập từ xa)
                 try {
                     this.tunnel = await localtunnel({ port: this.PORT });
                     this.publicUrl = this.tunnel.url;
                     console.log(`[WebServer] Public Tunnel URL: ${this.publicUrl}`);
-                    this.logService.addLog(LogLevel.Success, `Public Dashboard URL: ${this.publicUrl}`, 'WebServer');
+                    this.logService.addLog(LogLevel.Success, `URL: ${this.publicUrl} | Pass: ${this.tunnelPassword}`, 'WebServer');
 
                     this.tunnel.on('close', () => {
                         this.publicUrl = null;
