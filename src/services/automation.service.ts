@@ -4,15 +4,57 @@ import { AccountService } from './account.service';
 import { QuotaService } from './quota.service';
 import { LogService, LogLevel } from './log.service';
 import { NotificationService } from './notification.service';
+import { CdpService } from './cdp.service';
 
 /**
- * Dịch vụ tự động hóa - Chịu trách nhiệm tự động nhấn "Accept" cho các bước thực thi
+ * Dịch vụ tự động hóa - Chế độ "Full Auto" chấp nhận mọi lệnh kể cả SSH
  */
 export class AutomationService {
     private isEnabled: boolean = true;
     private statusBarItem: vscode.StatusBarItem;
     private timer: NodeJS.Timeout | null = null;
-    private customCommands: string[] = [];
+    private cdpService: CdpService;
+    private customCommands: string[] = [
+        // Antigravity & Agent CIW Patterns
+        'antigravity.step.accept',
+        'antigravity.step.run',
+        'antigravity.step.approve',
+        'antigravity.step.apply',
+        'antigravity.runCommand',
+        'antigravity.accept',
+        'antigravity.agent.acceptStep',
+        'antigravity.agent.runCommand',
+        'antigravity.agent.approveCommand',
+        'antigravity.agent.execute',
+
+        // VS Code Native & Copilot Patterns
+        'chat.acceptAction',
+        'chat.apply',
+        'chat.runCommand',
+        'chat.accept',
+        'workbench.action.chat.accept',
+        'workbench.chat.action.accept',
+        'editor.action.inlineChat.accept',
+        'editor.action.inlineChat.run',
+        'interactive.accept',
+
+        // Other Popular Agents (Cortex, AIPR, Continue, etc.)
+        'aipr.accept',
+        'aipr.run',
+        'aipr.continue',
+        'cortex.acceptAll',
+        'cortex.runCommand',
+        'cortex.approve',
+        'cortex.execute',
+        'continue.accept',
+        'continue.run',
+        'continue.approve',
+        'cody.accept',
+        'cody.run',
+        'cursor.accept',
+        'cursor.run',
+        'tabnine.accept'
+    ];
 
     constructor(
         private context: vscode.ExtensionContext,
@@ -21,25 +63,14 @@ export class AutomationService {
         private logService: LogService,
         private notificationService: NotificationService
     ) {
-        // Khởi tạo mục hiển thị trên thanh trạng thái
+        // Khởi tạo CDP Service
+        this.cdpService = new CdpService(context);
+
+        // Thanh trạng thái
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         this.statusBarItem.command = 'antigravity.toggleAutoAccept';
 
-        // Tải trạng thái và danh sách lệnh từ bộ nhớ
         this.isEnabled = this.context.globalState.get<boolean>('autoAcceptEnabled', true);
-        this.customCommands = this.context.globalState.get<string[]>('customAutoCommands', [
-            'antigravity.step.accept',
-            'antigravity.step.run',
-            'antigravity.step.approve',
-            'antigravity.step.apply',
-            'antigravity.acceptAll',
-            'antigravity.accept',
-            'antigravity.agent.acceptStep',
-            'aipr.accept',
-            'aipr.continue',
-            'cortex.acceptAll',
-            'cortex.runCommand'
-        ]);
 
         this.updateStatusBar();
         this.statusBarItem.show();
@@ -49,9 +80,6 @@ export class AutomationService {
         }
     }
 
-    /**
-     * Bật/Tắt chế độ tự động chấp nhận hoàn toàn
-     */
     public toggle() {
         this.isEnabled = !this.isEnabled;
         this.context.globalState.update('autoAcceptEnabled', this.isEnabled);
@@ -59,18 +87,18 @@ export class AutomationService {
 
         if (this.isEnabled) {
             this.startAutomating();
-            this.notificationService.notify('Antigravity Auto-Accept: ĐÃ BẬT (Bao gồm SSH)');
-            this.logService.addLog(LogLevel.Info, 'Đã bật chế độ tự động chấp nhận tất cả', 'Automation');
+            this.notificationService.notify('Antigravity Auto-Accept: BẬT SIÊU TỐC (Dual Engine)');
+            this.logService.addLog(LogLevel.Info, 'Bật chế độ tự động chấp nhận SIÊU TỐC', 'Automation');
         } else {
             this.stopAutomating();
             this.notificationService.notify('Antigravity Auto-Accept: ĐÃ TẮT', 'warn');
-            this.logService.addLog(LogLevel.Warning, 'Đã tắt chế độ tự động chấp nhận', 'Automation');
+            this.logService.addLog(LogLevel.Warning, 'Tắt chế độ tự động chấp nhận', 'Automation');
         }
     }
 
     private updateStatusBar() {
         if (this.isEnabled) {
-            this.statusBarItem.text = `$(check) Auto: ON`;
+            this.statusBarItem.text = `$(zap) Auto: ON (Max)`;
             this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.remoteBackground');
         } else {
             this.statusBarItem.text = `$(x) Auto: OFF`;
@@ -78,32 +106,39 @@ export class AutomationService {
         }
     }
 
-    /**
-     * Bắt đầu vòng lặp tự động hóa
-     */
-    private startAutomating() {
+    private async startAutomating() {
         if (this.timer) return;
 
-        // Tần suất kiểm tra: 1 giây để đảm bảo phản hồi nhanh nhất
+        // 1. Khởi động CDP Service (Advanced Auto Accept)
+        await this.cdpService.start();
+
+        // Kiểm tra xem debug port có hoạt động không
+        const isCdpActive = await this.cdpService.isDebuggingEnabled();
+        if (!isCdpActive) {
+            // Chỉ log cảnh báo, không làm phiền người dùng
+            this.logService.addLog(LogLevel.Warning, 'CDP Debug Port không hoạt động. Chạy chế độ tương thích cơ bản.', 'Automation');
+        } else {
+            this.logService.addLog(LogLevel.Info, 'CDP Engine đã kích hoạt. Hiệu suất tối đa.', 'Automation');
+        }
+
+        // 2. Chạy polling lệnh truyền thống (200ms)
         this.timer = setInterval(async () => {
             if (!this.isEnabled) return;
 
-            // 1. Kiểm tra Quota và tự động chuyển đổi tài khoản
+            // Quản lý Quota
             await this.checkAndSwitchAccount();
 
-            // 2. Duyệt và thực thi tất cả các lệnh chấp nhận (bao gồm cả các bước chứa SSH)
+            // Tự động chấp nhận - Thử mọi command có thể
             for (const cmd of this.customCommands) {
                 try {
-                    // Thực thi lệnh không cần kiểm tra nội dung để đảm bảo tính tự động hoàn toàn
                     await vscode.commands.executeCommand(cmd);
-                } catch (e) { }
+                } catch (e) {
+                    // Bỏ qua lỗi
+                }
             }
-        }, 1000);
+        }, 200);
     }
 
-    /**
-     * Tự động kiểm tra và chuyển tài khoản khi hết Quota (dưới 1%)
-     */
     private async checkAndSwitchAccount() {
         const activeEmail = await this.accountService.getActiveEmail();
         const accounts = this.accountService.getAccounts();
@@ -112,8 +147,6 @@ export class AutomationService {
         if (currentAccount) {
             const quotas = this.quotaService.getCachedQuotas(currentAccount.id);
             if (quotas && quotas.length > 0 && (quotas[0].percent || 0) < 1) {
-                this.logService.addLog(LogLevel.Warning, `Tài khoản ${activeEmail} hết quota. Đang tìm tài khoản thay thế...`, 'Automation');
-
                 const replacement = accounts.find(a => {
                     if (a.id === currentAccount.id) return false;
                     const q = this.quotaService.getCachedQuotas(a.id);
@@ -122,21 +155,18 @@ export class AutomationService {
 
                 if (replacement) {
                     await this.accountService.switchAccount(replacement.id);
-                    this.logService.addLog(LogLevel.Success, `Đã tự động chuyển sang: ${replacement.name}`, 'Automation');
-                    this.notificationService.notify(`Đã chuyển sang ${replacement.name} do hết quota.`);
+                    this.logService.addLog(LogLevel.Success, `Auto-Switch: ${replacement.name}`, 'Automation');
                 }
             }
         }
     }
 
-    /**
-     * Dừng vòng lặp tự động hóa
-     */
     private stopAutomating() {
         if (this.timer) {
             clearInterval(this.timer);
             this.timer = null;
         }
+        // Dừng CDP
+        this.cdpService.stop();
     }
 }
-
