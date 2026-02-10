@@ -38,14 +38,14 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('antigravity.refreshQuota', () => {
             quotaService.refreshAll();
-            vscode.window.showInformationMessage('Đang làm mới hạn mức...');
+            vscode.window.showInformationMessage('Refreshing quotas...');
         })
     );
 
     context.subscriptions.push(
         vscode.commands.registerCommand('antigravity.addAccount', async () => {
             const input = await vscode.window.showInputBox({
-                prompt: 'Nhập nội dung tài khoản (JSON hoặc Key)',
+                prompt: 'Enter account content (JSON or Key)',
                 placeHolder: '{"api_key": "..."}'
             });
             if (input) {

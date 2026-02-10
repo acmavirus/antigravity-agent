@@ -1,43 +1,43 @@
 # Antigravity Agent - VS Code Extension
 
-**Antigravity Agent** là một tiện ích mở rộng mạnh mẽ giúp quản lý tài khoản AI, giám sát hạn mức (quota) thời gian thực và tự động kích hoạt chu kỳ reset hạn mức.
+**Antigravity Agent** is a powerful extension that helps manage AI accounts, monitor quotas in real-time, and automatically activate quota reset cycles.
 
-## 🚀 Tính năng chính
+## 🚀 Key Features
 
-### 1. Quản lý Tài khoản & Ủy quyền (Account & Auth)
-- **Hỗ trợ đa nguồn**: Nhập từ JSON, API Key, hoặc đồng bộ từ Antigravity Desktop.
-- **Trạng thái thông minh**: Tự động phát hiện lỗi 403 Forbidden hoặc hết hạn.
-- **Chuyển đổi nhanh**: Quản lý tập trung tại Sidebar Dashboard.
+### 1. Account & Auth Management
+- **Multi-source Support**: Import from JSON, API Keys, or sync from Antigravity Desktop.
+- **Smart Status**: Automatically detects 403 Forbidden or expired sessions.
+- **Quick Switching**: Centralized management via Sidebar Dashboard.
 
-### 2. Giám sát Hạn mức (Quota Monitoring)
-- **Dashboard trực quan**: Giao diện Glassmorphism hiển thị tiến trình sử dụng.
-- **Status Bar**: Theo dõi nhanh phần trăm hạn mức ngay trên thanh trạng thái VS Code.
-- **Cache**: Tối ưu hóa yêu cầu mạng với bộ nhớ đệm 60 giây.
+### 2. Quota Monitoring
+- **Visual Dashboard**: Glassmorphism interface displaying usage progress.
+- **Status Bar**: Quickly track quota percentages directly on the VS Code status bar.
+- **Caching**: Optimizes network requests with a 60-second cache.
 
-### 3. Tự động "Thức tỉnh" (Auto Wake-up)
-- **Lập lịch thông minh**: Tự động gửi request kích hoạt chu kỳ reset.
-- **Khung giờ làm việc**: Tránh chạy tự động ngoài giờ cấu hình (mặc định 08:00-22:00).
-- **Lịch sử**: Ghi lại chi tiết các lần kích hoạt thành công/thất bại.
+### 3. Auto Wake-up
+- **Smart Scheduling**: Automatically sends requests to trigger reset cycles.
+- **Working Hours**: Avoids running outside of configured hours (default 08:00-22:00).
+- **History**: Logs successful and failed activation attempts.
 
-### 4. Hiệu suất & Bảo mật
-- **Concurrency Control**: Sử dụng Mutex Lock để bảo vệ dữ liệu khi thao tác đồng thời.
-- **Tối ưu tài nguyên**: Webview được tinh gọn để giảm dấu chân bộ nhớ.
+### 4. Performance & Security
+- **Concurrency Control**: Uses Mutex Locks to protect data during simultaneous operations.
+- **Resource Optimization**: Lightweight Webview to reduce memory footprint.
 
-### 5. Cá nhân hóa & Quốc tế hóa
-- **Đa ngôn ngữ**: Hỗ trợ Tiếng Việt (mặc định), Tiếng Anh, Tiếng Trung...
-- **Privacy Mode**: Ẩn dữ liệu nhạy cảm.
+### 5. Personalization & Internationalization
+- **Multi-language**: Supports Vietnamese, English, Chinese, etc.
+- **Privacy Mode**: Hide sensitive data.
 
-## 🛠️ Cài đặt & Phát triển
+## 🛠️ Installation & Development
 
-1. Cài đặt các gói phụ thuộc:
+1. Install dependencies:
    ```bash
    npm install
    ```
-2. Biên dịch mã nguồn:
+2. Compile source code:
    ```bash
    npm run compile
    ```
-3. Nhấn `F5` để chạy thử trong cửa sổ **Extension Development Host**.
+3. Press `F5` to run in the **Extension Development Host** window.
 
 ---
 **Copyright by AcmaTvirus**

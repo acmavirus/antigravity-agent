@@ -107,10 +107,10 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                 <h1>Antigravity</h1>
             </div>
             <div class="actions">
-                <button id="autoImportBtn" title="Tự động nhập"><i class="codicon codicon-cloud-download"></i></button>
-                <button id="addBtn" title="Thêm tài khoản"><i class="codicon codicon-add"></i></button>
-                <button id="refreshBtn" title="Làm mới"><i class="codicon codicon-refresh"></i></button>
-                <button id="settingsBtn" title="Tùy chỉnh giao diện"><i class="codicon codicon-settings"></i></button>
+                <button id="autoImportBtn" title="Auto Import"><i class="codicon codicon-cloud-download"></i></button>
+                <button id="addBtn" title="Add Account"><i class="codicon codicon-add"></i></button>
+                <button id="refreshBtn" title="Refresh"><i class="codicon codicon-refresh"></i></button>
+                <button id="settingsBtn" title="Interface Settings"><i class="codicon codicon-settings"></i></button>
             </div>
         </header>
 
@@ -124,14 +124,14 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
             <!-- ACCOUNT TAB -->
             <div id="accounts-tab" class="tab-pane active">
                 <div id="account-list" class="account-grid">
-                    <div class="loading">Đang tải dữ liệu...</div>
+                    <div class="loading">Loading data...</div>
                 </div>
             </div>
 
             <!-- ANALYTICS TAB -->
             <div id="analytics-tab" class="tab-pane">
                 <div class="analytics-container">
-                    <h3>Thống kê sử dụng (7 ngày)</h3>
+                    <h3>Usage Stats (7 days)</h3>
                     <div id="analytics-chart" class="chart-container">
                         <!-- Chart will be injected here -->
                     </div>
@@ -141,8 +141,8 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
             <!-- LOGS TAB -->
             <div id="logs-tab" class="tab-pane">
                 <div class="logs-header">
-                    <h3>Hoạt động hệ thống</h3>
-                    <button id="clearLogsBtn" title="Xóa log"><i class="codicon codicon-trash"></i></button>
+                    <h3>System Activities</h3>
+                    <button id="clearLogsBtn" title="Clear Logs"><i class="codicon codicon-trash"></i></button>
                 </div>
                 <div id="log-list" class="log-timeline">
                     <!-- Logs will be injected here -->
@@ -152,7 +152,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
         <div id="settings-panel" class="settings-panel hidden">
             <div class="settings-header">
-                <h3>Cấu hình nâng cao</h3>
+                <h3>Advanced Configuration</h3>
                 <button id="closeSettingsBtn"><i class="codicon codicon-close"></i></button>
             </div>
             <div class="settings-content">
@@ -166,16 +166,16 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                 </div>
                 <hr>
                 <div class="setting-group">
-                    <label>Chủ đề</label>
+                    <label>Theme</label>
                     <div class="theme-options">
-                        <button class="theme-opt active" data-theme="auto" title="Tự động (VS Code)">🖥️</button>
-                        <button class="theme-opt" data-theme="dark" title="Tối">🌑</button>
-                        <button class="theme-opt" data-theme="light" title="Sáng">☀️</button>
+                        <button class="theme-opt active" data-theme="auto" title="Auto (VS Code)">🖥️</button>
+                        <button class="theme-opt" data-theme="dark" title="Dark">🌑</button>
+                        <button class="theme-opt" data-theme="light" title="Light">☀️</button>
                         <button class="theme-opt" data-theme="cyber" title="Cyberpunk">🔮</button>
                     </div>
                 </div>
                 <div class="setting-group">
-                    <label>Màu nhấn (Accent)</label>
+                    <label>Accent Color</label>
                     <div class="color-options">
                         <button class="color-opt active" data-color="#38bdf8" style="background: #38bdf8;"></button>
                         <button class="color-opt" data-color="#10b981" style="background: #10b981;"></button>

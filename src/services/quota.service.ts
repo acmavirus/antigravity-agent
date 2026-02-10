@@ -112,13 +112,13 @@ export class QuotaService {
                         this.updateStatusBar(updatedQuotas);
                     }
 
-                    this.logService.addLog(LogLevel.Info, `Đã cập nhật hạn mức cho ${account.name}`, 'Quota');
+                    this.logService.addLog(LogLevel.Info, `Updated quotas for ${account.name}`, 'Quota');
                 }
             } catch (error: any) {
-                this.logService.addLog(LogLevel.Error, `Lỗi làm mới quota cho ${account.name}: ${error.message}`, 'Quota');
+                this.logService.addLog(LogLevel.Error, `Error refreshing quota for ${account.name}: ${error.message}`, 'Quota');
                 if (error.response?.status === 403) {
                     await this.accountService.updateStatus(account.id, AccountStatus.Forbidden);
-                    this.notificationService.notify(`Tài khoản ${account.name} bị từ chối truy cập (403)!`, 'error');
+                    this.notificationService.notify(`Account ${account.name} access denied (403)!`, 'error');
                 }
             }
         }
@@ -221,10 +221,10 @@ export class QuotaService {
     }
 
     private formatResetTime(iso: string): string {
-        if (!iso) return "Không rõ";
+        if (!iso) return "Unknown";
         try {
             const date = new Date(iso);
-            return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + " " + date.toLocaleDateString('vi-VN');
+            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) + " " + date.toLocaleDateString('en-US');
         } catch (e) {
             return iso;
         }
@@ -257,7 +257,7 @@ export class QuotaService {
 
         const p = selected.percent || 0;
         barItem.text = `$(pulse) ${selected.displayName}: ${p}%`;
-        barItem.tooltip = `Nhấn để đổi Model hiển thị. Hiện tại: ${selected.displayName}`;
+        barItem.tooltip = `Click to change displayed Model. Current: ${selected.displayName}`;
 
         if (p < 10) barItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
         else if (p < 30) barItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
@@ -282,11 +282,11 @@ export class QuotaService {
         }
 
         if (items.length === 0) {
-            vscode.window.showInformationMessage('Vui lòng Refresh để cập nhật danh sách Model của tài khoản đang dùng.');
+            vscode.window.showInformationMessage('Please Refresh to update the model list for the current account.');
             return;
         }
 
-        const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Chọn Model hiển thị trên thanh trạng thái' });
+        const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Select Model to display on the status bar' });
         if (picked) {
             await this.context.globalState.update(this.STORAGE_KEY_PINNED, picked.id);
             // Cập nhật ngay hạn mức khi người dùng đổi model

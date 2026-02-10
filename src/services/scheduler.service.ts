@@ -59,7 +59,7 @@ export class SchedulerService {
     }
 
     private async performWakeUp() {
-        console.log('[Scheduler] Đang kiểm tra lịch trình Auto Wake-up...');
+        console.log('[Scheduler] Checking Auto Wake-up schedule...');
         const accounts = this.accountService.getAccounts();
         let wakeUpCount = 0;
 
@@ -74,13 +74,13 @@ export class SchedulerService {
                 if (this.processedResets.has(resetKey)) continue;
 
                 if (this.isResetTimePassed(model)) {
-                    console.log(`[Scheduler] Kích hoạt model ${model.displayName} cho tài khoản ${account.name} (Reset time: ${model.resetTime})`);
+                    console.log(`[Scheduler] Activating model ${model.displayName} for account ${account.name} (Reset time: ${model.resetTime})`);
 
                     await this.quotaService.refreshAll(true);
                     this.processedResets.add(resetKey);
                     wakeUpCount++;
 
-                    this.logService.addLog(LogLevel.Success, `Kích hoạt tự động thành công: ${model.displayName} (${model.resetTime})`, 'Scheduler');
+                    this.logService.addLog(LogLevel.Success, `Auto-activation successful: ${model.displayName} (${model.resetTime})`, 'Scheduler');
 
                     // Giới hạn chỉ log 1 lần cho mỗi đợt quét của tài khoản
                     break;
@@ -89,7 +89,7 @@ export class SchedulerService {
         }
 
         if (wakeUpCount > 0) {
-            vscode.window.showInformationMessage(`🚀 Auto Wake-up: Đã thức tỉnh ${wakeUpCount} model vừa reset.`);
+            vscode.window.showInformationMessage(`🚀 Auto Wake-up: Awakened ${wakeUpCount} models that just reset.`);
         }
 
         // Dọn dẹp bộ nhớ đệm resetKey cũ (quá 24h)
@@ -109,7 +109,7 @@ export class SchedulerService {
             return diffMs >= 0 && diffMs < 30 * 60 * 1000;
         }
 
-        if (!resetTimeStr || resetTimeStr === "Never" || resetTimeStr === "Không rõ") return false;
+        if (!resetTimeStr || resetTimeStr === "Never" || resetTimeStr === "Unknown") return false;
         try {
             // Fallback parsing logic
             const parts = resetTimeStr.split(' ');

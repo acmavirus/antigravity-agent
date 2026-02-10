@@ -52,12 +52,12 @@ export class AutomationService {
 
         if (this.isEnabled) {
             this.startAutomating();
-            this.notificationService.notify('Antigravity Auto-Accept: BẬT');
-            this.logService.addLog(LogLevel.Info, 'Bật chế độ tự động chấp nhận', 'Automation');
+            this.notificationService.notify('Antigravity Auto-Accept: ON');
+            this.logService.addLog(LogLevel.Info, 'Enable auto-accept mode', 'Automation');
         } else {
             this.stopAutomating();
-            this.notificationService.notify('Antigravity Auto-Accept: TẮT', 'warn');
-            this.logService.addLog(LogLevel.Warning, 'Tắt chế độ tự động chấp nhận', 'Automation');
+            this.notificationService.notify('Antigravity Auto-Accept: OFF', 'warn');
+            this.logService.addLog(LogLevel.Warning, 'Disable auto-accept mode', 'Automation');
         }
     }
 
@@ -98,7 +98,7 @@ export class AutomationService {
             const quotas = this.quotaService.getCachedQuotas(currentAccount.id);
             // Nếu model đầu tiên hết quota (dưới 1%)
             if (quotas && quotas.length > 0 && (quotas[0].percent || 0) < 1) {
-                this.logService.addLog(LogLevel.Warning, `Tài khoản ${activeEmail} đã hết hạn mức. Đang tìm tài khoản thay thế...`, 'Automation');
+                this.logService.addLog(LogLevel.Warning, `Account ${activeEmail} is out of quota. Searching for replacement...`, 'Automation');
 
                 // Tìm tài khoản khác còn quota
                 const replacement = accounts.find(a => {
@@ -109,10 +109,10 @@ export class AutomationService {
 
                 if (replacement) {
                     await this.accountService.switchAccount(replacement.id);
-                    this.logService.addLog(LogLevel.Success, `Đã tự động chuyển sang tài khoản: ${replacement.name}`, 'Automation');
-                    this.notificationService.notify(`Đã đổi sang ${replacement.name} do tài khoản cũ hết hạn mức.`);
+                    this.logService.addLog(LogLevel.Success, `Automatically switched to account: ${replacement.name}`, 'Automation');
+                    this.notificationService.notify(`Switched to ${replacement.name} because the old account is out of quota.`);
                 } else {
-                    this.notificationService.notify('Tất cả tài khoản đã hết hạn mức!', 'error');
+                    this.notificationService.notify('All accounts are out of quota!', 'error');
                 }
             }
         }

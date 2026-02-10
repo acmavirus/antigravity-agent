@@ -59,7 +59,7 @@ export class ProtobufDecoder {
                 bytes: String,
             });
         } catch (e) {
-            console.error('Lỗi giải mã Protobuf:', e);
+            console.error('Protobuf decoding error:', e);
             return null;
         }
     }

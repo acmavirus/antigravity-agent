@@ -158,7 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!container) return;
 
         if (accounts.length === 0) {
-            container.innerHTML = '<div class="empty-state">Chưa có tài khoản nào. Nhấn "+" để thêm.</div>';
+            container.innerHTML = '<div class="empty-state">No accounts yet. Click "+" to add.</div>';
             return;
         }
 
@@ -171,8 +171,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const statusClass = acc.status === 'active' ? 'status-active' : 'status-forbidden';
             const switchButton = acc.isActive ?
-                `<span class="active-label"><i class="codicon codicon-check"></i> Đang dùng</span>` :
-                `<button class="switch-btn" data-id="${acc.id}">Sử dụng</button>`;
+                `<span class="active-label"><i class="codicon codicon-check"></i> In Use</span>` :
+                `<button class="switch-btn" data-id="${acc.id}">Use</button>`;
 
             card.innerHTML = `
                 <div class="card-header">
@@ -183,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="header-right">
                         ${acc.isActive ? '<span class="status-indicator"></span>' : ''}
                         <span class="status-badge ${statusClass}"></span>
-                        <button class="delete-btn" data-id="${acc.id}" title="Xóa tài khoản"><i class="codicon codicon-close"></i></button>
+                        <button class="delete-btn" data-id="${acc.id}" title="Remove Account"><i class="codicon codicon-close"></i></button>
                     </div>
                 </div>
                 <div class="card-body">
@@ -205,7 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     </div>
                                 </div>
                             `;
-            }).join('') : '<div class="meta">Chưa có dữ liệu hạn mức.</div>'}
+            }).join('') : '<div class="meta">No quota data available.</div>'}
                     </div>
                     <div class="card-footer">
                         ${switchButton}
@@ -221,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!container || !logs) return;
 
         if (logs.length === 0) {
-            container.innerHTML = '<div class="empty-state">Chưa có hoạt động nào.</div>';
+            container.innerHTML = '<div class="empty-state">No activities yet.</div>';
             return;
         }
 
@@ -241,7 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!container || !data) return;
 
         if (data.length === 0) {
-            container.innerHTML = '<div class="empty-state">Chưa có dữ liệu thống kê.</div>';
+            container.innerHTML = '<div class="empty-state">No statistical data available.</div>';
             return;
         }
 

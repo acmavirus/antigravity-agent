@@ -101,14 +101,14 @@ export class AccountService {
                 this.accounts[existingIndex].data = newAccount.data;
                 this.accounts[existingIndex].status = newAccount.status;
                 this.accounts[existingIndex].lastChecked = Date.now();
-                vscode.window.showInformationMessage(`Đã cập nhật tài khoản: ${newAccount.name}`);
+                vscode.window.showInformationMessage(`Account updated: ${newAccount.name}`);
             } else {
                 this.accounts.push(newAccount);
-                vscode.window.showInformationMessage(`Đã thêm tài khoản: ${newAccount.name}`);
+                vscode.window.showInformationMessage(`Account added: ${newAccount.name}`);
             }
             await this.saveAccounts();
         } catch (e) {
-            vscode.window.showErrorMessage('Lỗi khi thêm tài khoản: Dữ liệu không hợp lệ.');
+            vscode.window.showErrorMessage('Error adding account: Invalid data.');
         } finally {
             release();
         }
@@ -153,7 +153,7 @@ export class AccountService {
                         this.accounts[existingIndex].data = { raw: result };
                         this.accounts[existingIndex].lastChecked = Date.now();
                         await this.saveAccounts();
-                        vscode.window.showInformationMessage(`Đã đồng bộ phiên đăng nhập: ${email}`);
+                        vscode.window.showInformationMessage(`Session synced: ${email}`);
                         return true;
                     } else {
                         // Add new
@@ -166,7 +166,7 @@ export class AccountService {
                             lastChecked: Date.now()
                         });
                         await this.saveAccounts();
-                        vscode.window.showInformationMessage(`Đã tự động nhập tài khoản: ${email}`);
+                        vscode.window.showInformationMessage(`Account automatically imported: ${email}`);
                         return true;
                     }
                 }
@@ -189,10 +189,10 @@ export class AccountService {
                 }
             }
 
-            vscode.window.showWarningMessage('Không tìm thấy tài khoản Antigravity hợp lệ.');
+            vscode.window.showWarningMessage('No valid Antigravity account found.');
             return false;
         } catch (e: any) {
-            vscode.window.showErrorMessage(`Lỗi tự động nhập: ${e.message}`);
+            vscode.window.showErrorMessage(`Auto-import error: ${e.message}`);
             return false;
         } finally {
             release();
@@ -231,7 +231,7 @@ export class AccountService {
     public async switchAccount(id: string) {
         const account = this.accounts.find(a => a.id === id);
         if (!account || !account.data?.raw) {
-            vscode.window.showErrorMessage('Tài khoản không hợp lệ hoặc thiếu dữ liệu session.');
+            vscode.window.showErrorMessage('Invalid account or missing session data.');
             return;
         }
 
@@ -258,10 +258,10 @@ export class AccountService {
             // Xóa file tạm ngay sau khi xong
             if (fs.existsSync(tempSqlPath)) fs.unlinkSync(tempSqlPath);
 
-            vscode.window.showInformationMessage(`Đã chuyển sang tài khoản: ${account.name}. Hãy khởi động lại Antigravity để áp dụng.`);
+            vscode.window.showInformationMessage(`Switched to account: ${account.name}. Please restart Antigravity to apply.`);
         } catch (e: any) {
             if (fs.existsSync(tempSqlPath)) fs.unlinkSync(tempSqlPath);
-            vscode.window.showErrorMessage(`Lỗi khi chuyển tài khoản: ${e.message}`);
+            vscode.window.showErrorMessage(`Error switching account: ${e.message}`);
         }
     }
 }

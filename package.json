@@ -1,7 +1,7 @@
 {
     "name": "antigravity-agent",
     "displayName": "Antigravity Agent",
-    "description": "Quản lý Tài khoản, Giám sát Hạn mức & Tự động Kích hoạt AI Intelligence.",
+    "description": "Manage Accounts, Monitor Quotas & Automate AI Intelligence Activation.",
     "version": "1.0.0",
     "publisher": "AcmaTvirus",
     "icon": "resources/logo.png",
@@ -64,22 +64,22 @@
                 "antigravity.updateInterval": {
                     "type": "integer",
                     "default": 300,
-                    "description": "Khoảng thời gian cập nhật hạn mức (giây)."
+                    "description": "Quota update interval (seconds)."
                 },
                 "antigravity.enableAutoWakeup": {
                     "type": "boolean",
                     "default": true,
-                    "description": "Bật/Tắt tính năng Auto Wake-up khi model đến giờ reset."
+                    "description": "Enable/Disable Auto Wake-up when the model reset time is reached."
                 },
                 "antigravity.workHoursOnly": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Chỉ thực hiện Wake-up trong khung giờ làm việc."
+                    "description": "Only perform Wake-up during configured working hours."
                 },
                 "antigravity.workHours": {
                     "type": "string",
                     "default": "08:00-22:00",
-                    "description": "Khung giờ làm việc cho phép Wake-up (nếu bật workHoursOnly)."
+                    "description": "Allowed working hours for Wake-up (if workHoursOnly is enabled)."
                 },
                 "antigravity.language": {
                     "type": "string",
@@ -91,7 +91,7 @@
                         "ru",
                         "ja"
                     ],
-                    "description": "Ngôn ngữ hiển thị."
+                    "description": "Display language."
                 }
             }
         }
