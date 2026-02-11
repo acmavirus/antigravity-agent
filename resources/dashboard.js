@@ -204,6 +204,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 `<span class="active-label"><i class="codicon codicon-check"></i> In Use</span>` :
                 `<button class="switch-btn" data-id="${acc.id}">Use</button>`;
 
+            // Render Pools
+            const poolsHtml = acc.pools && acc.pools.length > 0 ? `
+                <div class="pools-container">
+                    ${acc.pools.map(p => `
+                        <div class="pool-tag" title="Includes models: ${p.models.join(', ')}">
+                            <i class="codicon codicon-package"></i> ${p.displayName}: <b>${p.totalPercent}%</b>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : '';
+
             card.innerHTML = `
                 <div class="card-header">
                     <div class="header-left">
@@ -217,22 +228,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
                 <div class="card-body">
+                    ${poolsHtml}
                     <div class="quotas">
                         ${acc.quotas.length > 0 ? acc.quotas.map(q => {
                 const percentRemaining = q.percent;
                 const colorClass = percentRemaining < 10 ? 'critical' : (percentRemaining < 30 ? 'warning' : '');
+
+                // Tooltip info
+                const cap = q.capabilities || {};
+                const tooltipInfo = `
+[${q.displayName}]
+• Context: ${cap.contextWindow || 'N/A'}
+• Training: ${cap.trainingData || 'N/A'}
+• Features: ${[
+                        cap.supportsThinking ? 'Thinking' : '',
+                        cap.supportsImage ? 'Image' : '',
+                        cap.supportsVideo ? 'Video' : ''
+                    ].filter(Boolean).join(', ') || 'Text only'}
+                `.trim();
+
                 return `
-                                <div class="quota-item">
-                                    <div class="meta">
-                                        <span>${q.displayName}</span>
-                                        <span>${percentRemaining}%</span>
-                                    </div>
+                                <div class="quota-item" title="${tooltipInfo}">
+                                    <span class="status-dot ${colorClass}"></span>
+                                    <span class="model-name">${q.displayName}</span>
                                     <div class="progress-container">
                                         <div class="progress-bar ${colorClass}" style="width: ${percentRemaining}%"></div>
                                     </div>
-                                    <div class="meta">
-                                        <span class="reset-time"><i class="codicon codicon-history"></i> ${q.resetTime}</span>
-                                    </div>
+                                    <span class="percent-text">${percentRemaining.toFixed(2)}%</span>
+                                    <span class="arrow-icon">→</span>
+                                    <span class="reset-time">${q.resetTime}</span>
                                 </div>
                             `;
             }).join('') : '<div class="meta">No quota data available.</div>'}

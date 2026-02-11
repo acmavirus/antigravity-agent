@@ -76,6 +76,75 @@ export function activate(context: vscode.ExtensionContext) {
             })
         );
 
+        context.subscriptions.push(
+            vscode.commands.registerCommand('antigravity.quickPickQuota', async () => {
+                const accounts = accountService.getAccounts();
+                const activeEmail = await accountService.getActiveEmail();
+                const activeAccount = accounts.find(a => a.name === activeEmail);
+
+                if (!activeAccount) {
+                    vscode.window.showErrorMessage('No active account found.');
+                    return;
+                }
+
+                const quotas = quotaService.getCachedQuotas(activeAccount.id) || [];
+                const pools = quotaService.getPools(activeAccount.id);
+
+                const items: vscode.QuickPickItem[] = [];
+
+                // Helper để tạo thanh tiến trình văn bản
+                const getBar = (p: number) => {
+                    const size = 10;
+                    const filled = Math.round((p / 100) * size);
+                    return '[' + '█'.repeat(filled) + '░'.repeat(size - filled) + ']';
+                };
+
+                // Helper tính thời gian còn lại
+                const getTimeRemaining = (raw?: number) => {
+                    if (!raw) return 'N/A';
+                    const diff = raw - Date.now();
+                    if (diff <= 0) return '0h 0m';
+                    const h = Math.floor(diff / 3600000);
+                    const m = Math.floor((diff % 3600000) / 60000);
+                    return `${h}h ${m}m`;
+                };
+
+                // Thêm các Pool (Gom nhóm)
+                if (pools.length > 0) {
+                    items.push({ label: 'QUOTA POOLS', kind: vscode.QuickPickItemKind.Separator });
+                    pools.forEach(p => {
+                        items.push({
+                            label: `🟢 ${p.displayName}`,
+                            description: `${getBar(p.totalPercent)} ${p.totalPercent.toFixed(2)}% -> ${getTimeRemaining(quotas.find(q => q.poolId === p.id)?.resetTimeRaw)}`,
+                        });
+                    });
+                }
+
+                // Thêm chi tiết từng Model
+                items.push({ label: 'INDIVIDUAL MODELS', kind: vscode.QuickPickItemKind.Separator });
+                quotas.forEach(q => {
+                    items.push({
+                        label: `🟢 ${q.displayName}`,
+                        description: `${getBar(q.percent || 0)} ${(q.percent || 0).toFixed(2)}% -> ${getTimeRemaining(q.resetTimeRaw)}`,
+                    });
+                });
+
+                const picked = await vscode.window.showQuickPick(items, {
+                    placeHolder: 'Click to open Quota Monitor',
+                    title: `🚀 Antigravity Quota Monitor | ${activeAccount.name.includes('@') ? 'Google AI Pro' : activeAccount.name}`
+                });
+
+                if (picked && picked.label.includes('🟢')) {
+                    const modelName = picked.label.replace('🟢 ', '');
+                    const model = quotas.find(q => q.displayName === modelName);
+                    if (model) {
+                        await context.globalState.update('antigravity.pinnedModelId', model.modelId);
+                        quotaService.refreshAll(false);
+                    }
+                }
+            })
+        );
+
         // Initial load
         // Run async tasks without awaiting effectively runs them in background
         quotaService.startMonitoring().catch(err => console.error('Quota monitoring failed:', err));

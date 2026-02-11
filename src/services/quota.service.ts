@@ -12,6 +12,21 @@ import * as https from 'https';
 
 const execAsync = promisify(exec);
 
+export interface ModelPool {
+    id: string;
+    displayName: string;
+    totalPercent: number;
+    models: string[];
+}
+
+export interface ModelCapabilities {
+    contextWindow: string;
+    trainingData: string;
+    supportsImage: boolean;
+    supportsVideo: boolean;
+    supportsThinking: boolean;
+}
+
 export interface ModelQuota {
     modelId: string;
     displayName: string;
@@ -22,6 +37,8 @@ export interface ModelQuota {
     resetTimeRaw?: number;
     groupLabel?: string;
     isPinned?: boolean;
+    poolId?: string;
+    capabilities?: ModelCapabilities;
 }
 
 export class QuotaService {
@@ -30,7 +47,6 @@ export class QuotaService {
     private readonly STORAGE_KEY_PINNED = 'antigravity.pinnedModelId';
     private localConnection: { port: number, token: string } | null = null;
 
-    // ... (URL và ID giữ nguyên)
     private readonly BASE_URL = "https://daily-cloudcode-pa.sandbox.googleapis.com";
     private readonly TOKEN_URL = "https://oauth2.googleapis.com/token";
     private readonly CLIENT_ID = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com";
@@ -44,6 +60,37 @@ export class QuotaService {
         "claude-sonnet-4-5-thinking": "Claude Sonnet 4.5 (Thinking)",
         "claude-opus-4-5-thinking": "Claude Opus 4.5 (Thinking)",
         "gpt-oss-120b-medium": "GPT-OSS 120B (Medium)",
+    };
+
+    private readonly MODEL_METADATA: Record<string, { capabilities: ModelCapabilities, poolId: string }> = {
+        "gemini-3-pro-high": {
+            poolId: "gemini-3-pro",
+            capabilities: { contextWindow: "2M tokens", trainingData: "Dec 2024", supportsImage: true, supportsVideo: true, supportsThinking: true }
+        },
+        "gemini-3-pro-low": {
+            poolId: "gemini-3-pro",
+            capabilities: { contextWindow: "128K tokens", trainingData: "Oct 2024", supportsImage: true, supportsVideo: false, supportsThinking: false }
+        },
+        "gemini-3-flash": {
+            poolId: "gemini-3-flash",
+            capabilities: { contextWindow: "1M tokens", trainingData: "Sep 2024", supportsImage: true, supportsVideo: true, supportsThinking: false }
+        },
+        "claude-sonnet-4-5": {
+            poolId: "claude-4-5",
+            capabilities: { contextWindow: "200K tokens", trainingData: "Jan 2025", supportsImage: true, supportsVideo: false, supportsThinking: false }
+        },
+        "claude-sonnet-4-5-thinking": {
+            poolId: "claude-4-5",
+            capabilities: { contextWindow: "200K tokens", trainingData: "Jan 2025", supportsImage: true, supportsVideo: false, supportsThinking: true }
+        },
+        "claude-opus-4-5-thinking": {
+            poolId: "claude-4-5",
+            capabilities: { contextWindow: "400K tokens", trainingData: "Feb 2025", supportsImage: true, supportsVideo: true, supportsThinking: true }
+        },
+        "gpt-oss-120b-medium": {
+            poolId: "gpt-oss",
+            capabilities: { contextWindow: "128K tokens", trainingData: "Nov 2024", supportsImage: false, supportsVideo: false, supportsThinking: false }
+        }
     };
 
     private readonly STORAGE_KEY_QUOTAS = 'antigravity.quotas';
@@ -180,6 +227,8 @@ export class QuotaService {
 
                     const remainingPercent = Math.floor(fraction * 100);
 
+                    const meta = this.MODEL_METADATA[key];
+
                     result.push({
                         modelId: key,
                         displayName: displayName,
@@ -187,7 +236,9 @@ export class QuotaService {
                         limit: 100,
                         percent: remainingPercent,
                         resetTime: this.formatResetTime(resetTimeRaw),
-                        resetTimeRaw: resetTimeRaw ? new Date(resetTimeRaw).getTime() : undefined
+                        resetTimeRaw: resetTimeRaw ? new Date(resetTimeRaw).getTime() : undefined,
+                        poolId: meta?.poolId,
+                        capabilities: meta?.capabilities
                     });
                 }
             }
@@ -341,26 +392,40 @@ export class QuotaService {
         setInterval(() => this.refreshAll(false), intervalMs);
     }
 
-    private updateStatusBar(quotas: ModelQuota[]) {
+    private async updateStatusBar(quotas: ModelQuota[]) {
         if (quotas.length === 0) return;
 
+        const activeEmail = await this.accountService.getActiveEmail();
+        const accounts = this.accountService.getAccounts();
+        const activeAccount = accounts.find(a => a.name === activeEmail);
+
+        if (!activeAccount) return;
+
+        const pools = this.getPools(activeAccount.id);
         const pinnedId = this.context.globalState.get<string>(this.STORAGE_KEY_PINNED);
-        let selected = quotas.find(q => q.modelId === pinnedId) || quotas[0];
 
         let barItem = this.statusBarItems.get('main');
         if (!barItem) {
             barItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-            barItem.command = 'antigravity.pinModel';
+            barItem.command = 'antigravity.quickPickQuota';
             this.statusBarItems.set('main', barItem);
             barItem.show();
         }
 
-        const p = selected.percent || 0;
-        barItem.text = `$(pulse) ${selected.displayName}: ${p}%`;
-        barItem.tooltip = `Click to change displayed Model. Current: ${selected.displayName}`;
+        // Tạo chuỗi hiển thị: 🟢 Pool 1: 100% | 🟢 Pool 2: 95% ...
+        const parts = pools.map(p => {
+            const icon = p.totalPercent < 10 ? '🔴' : (p.totalPercent < 30 ? '🟡' : '🟢');
+            return `${icon} ${p.displayName}: ${p.totalPercent}%`;
+        });
 
-        if (p < 10) barItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
-        else if (p < 30) barItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+        // Nếu có model được pinned riêng lẻ, thêm vào đầu hoặc thay thế? 
+        // Theo ảnh thì hiển thị theo dạng các Group.
+        barItem.text = parts.join(' | ');
+        barItem.tooltip = `Antigravity Quota Monitor - Click to view details`;
+
+        // Đổi màu nền thanh trạng thái nếu có bất kỳ pool nào sắp hết
+        const hasWarning = pools.some(p => p.totalPercent < 10);
+        if (hasWarning) barItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
         else barItem.backgroundColor = undefined;
     }
 
@@ -396,5 +461,33 @@ export class QuotaService {
 
     public getCachedQuotas(accountId: string): ModelQuota[] | undefined {
         return this.cache.get(accountId);
+    }
+
+    public getPools(accountId: string): ModelPool[] {
+        const quotas = this.getCachedQuotas(accountId) || [];
+        const pools: Record<string, ModelPool> = {};
+
+        quotas.forEach((q: ModelQuota) => {
+            const pId = q.poolId || 'other';
+            if (!pools[pId]) {
+                pools[pId] = {
+                    id: pId,
+                    displayName: pId.charAt(0).toUpperCase() + pId.slice(1).replace(/-/g, ' '),
+                    totalPercent: 0,
+                    models: []
+                };
+            }
+            pools[pId].models.push(q.modelId);
+            pools[pId].totalPercent += (q.percent || 0);
+        });
+
+        return Object.values(pools).map(p => ({
+            ...p,
+            totalPercent: Math.floor(p.totalPercent / p.models.length)
+        }));
+    }
+
+    public getModelDetails(modelId: string) {
+        return this.MODEL_METADATA[modelId];
     }
 }

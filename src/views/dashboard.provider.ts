@@ -80,11 +80,16 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
     private async updateWebview(webviewView: vscode.WebviewView) {
         const activeEmail = await this.accountService.getActiveEmail();
-        const accounts = this.accountService.getAccounts().map(acc => ({
-            ...acc,
-            isActive: acc.name === activeEmail,
-            quotas: this.quotaService.getCachedQuotas(acc.id) || []
-        })).sort((a, b) => (b.isActive ? 1 : 0) - (a.isActive ? 1 : 0));
+        const accounts = this.accountService.getAccounts().map(acc => {
+            const quotas = this.quotaService.getCachedQuotas(acc.id) || [];
+            const pools = this.quotaService.getPools(acc.id);
+            return {
+                ...acc,
+                isActive: acc.name === activeEmail,
+                quotas,
+                pools
+            };
+        }).sort((a, b) => (b.isActive ? 1 : 0) - (a.isActive ? 1 : 0));
 
         const logs = this.logService.getLogs();
         const analytics = this.analyticsService.getUsageHistory();

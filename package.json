@@ -53,6 +53,11 @@
                 "command": "antigravity.toggleAutoAccept",
                 "title": "Antigravity: Toggle Auto-Accept",
                 "icon": "$(check)"
+            },
+            {
+                "command": "antigravity.quickPickQuota",
+                "title": "Antigravity: Quick View Quota",
+                "icon": "$(list-unordered)"
             }
         ],
         "keybindings": [
@@ -60,6 +65,11 @@
                 "command": "antigravity.toggleAutoAccept",
                 "key": "ctrl+alt+shift+u",
                 "when": "activeEditor"
+            },
+            {
+                "command": "antigravity.quickPickQuota",
+                "key": "ctrl+shift+q",
+                "when": "focusInEditor"
             }
         ],
         "configuration": {
