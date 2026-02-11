@@ -204,17 +204,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 `<span class="active-label"><i class="codicon codicon-check"></i> In Use</span>` :
                 `<button class="switch-btn" data-id="${acc.id}">Use</button>`;
 
-            // Render Pools
-            const poolsHtml = acc.pools && acc.pools.length > 0 ? `
-                <div class="pools-container">
-                    ${acc.pools.map(p => `
-                        <div class="pool-tag" title="Includes models: ${p.models.join(', ')}">
-                            <i class="codicon codicon-package"></i> ${p.displayName}: <b>${p.totalPercent}%</b>
-                        </div>
-                    `).join('')}
-                </div>
-            ` : '';
-
             card.innerHTML = `
                 <div class="card-header">
                     <div class="header-left">
@@ -222,35 +211,20 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span class="account-name">${acc.name}</span>
                     </div>
                     <div class="header-right">
-                        ${acc.isActive ? '<span class="status-indicator"></span>' : ''}
                         <span class="status-badge ${statusClass}"></span>
                         <button class="delete-btn" data-id="${acc.id}" title="Remove Account"><i class="codicon codicon-close"></i></button>
                     </div>
                 </div>
                 <div class="card-body">
-                    ${poolsHtml}
                     <div class="quotas">
                         ${acc.quotas.length > 0 ? acc.quotas.map(q => {
                 const percentRemaining = q.percent;
                 const colorClass = percentRemaining < 10 ? 'critical' : (percentRemaining < 30 ? 'warning' : '');
 
-                // Tooltip info
-                const cap = q.capabilities || {};
-                const tooltipInfo = `
-[${q.displayName}]
-• Context: ${cap.contextWindow || 'N/A'}
-• Training: ${cap.trainingData || 'N/A'}
-• Features: ${[
-                        cap.supportsThinking ? 'Thinking' : '',
-                        cap.supportsImage ? 'Image' : '',
-                        cap.supportsVideo ? 'Video' : ''
-                    ].filter(Boolean).join(', ') || 'Text only'}
-                `.trim();
-
                 return `
-                                <div class="quota-item" title="${tooltipInfo}">
+                                <div class="quota-item">
                                     <span class="status-dot ${colorClass}"></span>
-                                    <span class="model-name">${q.displayName}</span>
+                                    <span class="model-name" title="${q.displayName}">${q.displayName}</span>
                                     <div class="progress-container">
                                         <div class="progress-bar ${colorClass}" style="width: ${percentRemaining}%"></div>
                                     </div>
@@ -259,10 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <span class="reset-time">${q.resetTime}</span>
                                 </div>
                             `;
-            }).join('') : '<div class="meta">No quota data available.</div>'}
-                    </div>
-                    <div class="card-footer">
-                        ${switchButton}
+            }).join('') : '<div class="empty-state">No quota data.</div>'}
                     </div>
                 </div>
             `;

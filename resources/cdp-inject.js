@@ -92,37 +92,51 @@
     const performScan = () => {
         if (!state.isRunning) return;
 
-        // Không hành động nếu người dùng đang nhập liệu
+        // Không hành động nếu người dùng đang thực sự nhập liệu (Focus vào input)
         const active = document.activeElement;
         if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) {
             return;
         }
 
-        // Chỉ tìm kiếm trong document chính và các shadow roots phổ biến
-        const roots = [document];
-        // Tìm các shadow hosts (như các webview chat)
-        const hosts = document.querySelectorAll('.webview.ready');
-        hosts.forEach(h => { if (h.shadowRoot) roots.add(h.shadowRoot); });
+        // Danh sách các selector đặc trưng cho vùng Chat/Agent của VS Code và Cursor
+        const agentSelectors = [
+            '.chat-container',
+            '.composer-container',
+            '.interactive-container',
+            '.ai-chat-view',
+            '.pane-body', // Thường là nội dung của các Sidebar pane
+            '[id*="chat"]',
+            '[class*="chat"]'
+        ];
 
-        const selectors = ['button', '.monaco-button', '.bg-ide-button-background', '[role="button"]'];
+        // Tìm tất cả các rễ (document + shadow roots của webviews)
+        const roots = [document];
+        const hosts = document.querySelectorAll('.webview.ready');
+        hosts.forEach(h => { if (h.shadowRoot) roots.push(h.shadowRoot); });
+
+        const buttonSelectors = ['button', '.monaco-button', '.bg-ide-button-background', '[role="button"]'];
 
         roots.forEach(root => {
-            selectors.forEach(sel => {
-                const els = root.querySelectorAll?.(sel);
-                if (!els) return;
-                for (let i = 0; i < els.length; i++) {
-                    const el = els[i];
-                    if (isActionable(el)) {
-                        state.buttonCache.set(el, Date.now());
+            // Duyệt qua từng container của Agent
+            agentSelectors.forEach(agentSel => {
+                const containers = root.querySelectorAll(agentSel);
+                containers.forEach(container => {
+                    // Chỉ tìm nút bấm bên trong container này
+                    buttonSelectors.forEach(btnSel => {
+                        const els = container.querySelectorAll(btnSel);
+                        for (let i = 0; i < els.length; i++) {
+                            const el = els[i];
+                            if (isActionable(el)) {
+                                state.buttonCache.set(el, Date.now());
+                                log("Auto-Accepting in Agent View: " + el.textContent);
 
-                        // Thực hiện click
-                        if (typeof el.click === 'function') el.click();
-                        el.dispatchEvent(new MouseEvent('click', { view: window, bubbles: true, cancelable: true }));
-
-                        // Dừng quét ngay lập tức sau 1 lần click để tránh click hàng loạt gây loạn focus
-                        return;
-                    }
-                }
+                                if (typeof el.click === 'function') el.click();
+                                el.dispatchEvent(new MouseEvent('click', { view: window, bubbles: true, cancelable: true }));
+                                return; // Dừng quét sau khi tìm thấy 1 nút hợp lệ
+                            }
+                        }
+                    });
+                });
             });
         });
     };

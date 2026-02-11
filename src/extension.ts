@@ -145,10 +145,12 @@ export function activate(context: vscode.ExtensionContext) {
             })
         );
 
-        // Initial load
-        // Run async tasks without awaiting effectively runs them in background
-        quotaService.startMonitoring().catch(err => console.error('Quota monitoring failed:', err));
-        schedulerService.start();
+        // Initial load - Thêm delay 2s để IDE khởi tạo xong Language Server
+        setTimeout(() => {
+            quotaService.startMonitoring().catch(err => console.error('Quota monitoring failed:', err));
+            schedulerService.start();
+            console.log('Antigravity Agent background services started.');
+        }, 2000);
 
         console.log('Antigravity Agent activation completed.');
     } catch (e) {

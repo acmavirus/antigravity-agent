@@ -11,7 +11,7 @@ import { CdpService } from './cdp.service';
  * Dịch vụ tự động hóa - Phiên bản tối ưu chống nháy và chấp nhận mọi lệnh.
  */
 export class AutomationService {
-    private isEnabled: boolean = true;
+    private isEnabled: boolean = false;
     private statusBarItem: vscode.StatusBarItem;
     private pollTimer: NodeJS.Timeout | null = null;
     private lastState: string = '';
@@ -41,7 +41,7 @@ export class AutomationService {
     ) {
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         this.statusBarItem.command = 'antigravity.toggleAutoAccept';
-        this.isEnabled = this.context.globalState.get<boolean>('autoAcceptEnabled', true);
+        this.isEnabled = this.context.globalState.get<boolean>('autoAcceptEnabled', false);
 
         this.updateStatusBar(true);
         this.statusBarItem.show();
@@ -94,12 +94,14 @@ export class AutomationService {
             // Xử lý Quota và chuyển đổi tài khoản
             if (Math.random() > 0.95) await this.checkAndSwitchAccount();
 
-            // Native Commands (Duy trì tính tương thích)
+            // Native Commands đã bị loại bỏ để tránh chiếm quyền điều khiển UI (Focus Stealing)
+            /*
             for (const cmd of this.customCommands) {
                 try {
                     await vscode.commands.executeCommand(cmd);
                 } catch (e) { }
             }
+            */
 
             // Giao thức CDP để tương tác mức thấp (Chống treo AI)
             // Chúng ta có thể gửi lệnh Enter định kỳ nếu AI đang chờ input mà không làm gì

@@ -138,25 +138,22 @@ h1 {
 
 /* Card Styles */
 .card {
-    background: var(--card-bg);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid var(--glass-border);
-    border-radius: 12px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--glass-border);
+    border-radius: 0;
+    transition: all 0.2s;
     position: relative;
-    overflow: hidden;
+    margin-bottom: 8px;
 }
 
 .card:hover {
-    border-color: var(--glass-border-hover);
-    box-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.3);
-    background: var(--card-hover-bg);
+    background: rgba(128, 128, 128, 0.03);
 }
 
 .card.active {
-    border-color: var(--accent);
-    box-shadow: 0 0 20px -5px var(--accent-glow);
+    border-left: 3px solid var(--accent);
+    background: rgba(56, 189, 248, 0.02);
 }
 
 .card-header {
@@ -186,8 +183,9 @@ h1 {
 }
 
 .account-name {
-    font-weight: 700;
-    font-size: 0.9rem;
+    font-weight: 500;
+    font-size: 0.85rem;
+    color: var(--text-muted);
     word-break: break-all;
     line-height: 1.4;
 }
@@ -201,9 +199,7 @@ h1 {
 
 /* Card Body */
 .card-body {
-    padding: 0 8px 12px 8px;
-    transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
-    max-height: 2000px;
+    padding: 0 4px 8px 32px;
     opacity: 1;
 }
 
@@ -253,15 +249,11 @@ h1 {
 .quota-item {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
-    border-radius: 8px;
-    transition: background 0.2s;
-    cursor: help;
-}
-
-.quota-item:hover {
-    background: rgba(128, 128, 128, 0.08);
+    gap: 12px;
+    padding: 6px 0;
+    transition: all 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
 }
 
 .status-dot {
@@ -284,13 +276,13 @@ h1 {
 }
 
 .model-name {
-    flex: 1;
+    flex: 1.5;
     font-size: 0.85rem;
-    font-weight: 600;
-    white-space: nowrap;
+    font-weight: 500;
+    color: var(--text-main);
     overflow: hidden;
     text-overflow: ellipsis;
-    min-width: 120px;
+    min-width: 140px;
 }
 
 .quota-item .progress-container {
@@ -298,6 +290,9 @@ h1 {
     max-width: 120px;
     height: 6px;
     margin: 0;
+    background: rgba(128, 128, 128, 0.1);
+    border-radius: 10px;
+    overflow: hidden;
 }
 
 .progress-bar {
@@ -317,9 +312,10 @@ h1 {
 
 .percent-text {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
-    min-width: 65px;
+    font-size: 0.82rem;
+    min-width: 60px;
     text-align: right;
+    color: var(--text-main);
 }
 
 .arrow-icon {
@@ -339,9 +335,7 @@ h1 {
 }
 
 .card-footer {
-    margin-top: 16px;
-    display: flex;
-    justify-content: flex-end;
+    display: none;
 }
 
 .switch-btn {

@@ -412,19 +412,29 @@ export class QuotaService {
             barItem.show();
         }
 
-        // Tạo chuỗi hiển thị: 🟢 Pool 1: 100% | 🟢 Pool 2: 95% ...
-        const parts = pools.map(p => {
-            const icon = p.totalPercent < 10 ? '🔴' : (p.totalPercent < 30 ? '🟡' : '🟢');
-            return `${icon} ${p.displayName}: ${p.totalPercent}%`;
-        });
+        // Sử dụng pinnedId đã lấy từ đầu hàm
+        let displayText = '';
+        let hasWarning = false;
 
-        // Nếu có model được pinned riêng lẻ, thêm vào đầu hoặc thay thế? 
-        // Theo ảnh thì hiển thị theo dạng các Group.
-        barItem.text = parts.join(' | ');
+        if (pinnedId) {
+            const pinnedModel = quotas.find(q => q.modelId === pinnedId);
+            if (pinnedModel) {
+                const icon = (pinnedModel.percent || 0) < 10 ? '🔴' : ((pinnedModel.percent || 0) < 30 ? '🟡' : '🟢');
+                displayText = `${icon} ${pinnedModel.displayName}: ${pinnedModel.percent}%`;
+                hasWarning = (pinnedModel.percent || 0) < 10;
+            }
+        }
+
+        if (!displayText && pools.length > 0) {
+            const p = pools[0];
+            const icon = p.totalPercent < 10 ? '🔴' : (p.totalPercent < 30 ? '🟡' : '🟢');
+            displayText = `${icon} ${p.displayName}: ${p.totalPercent}%`;
+            hasWarning = p.totalPercent < 10;
+        }
+
+        barItem.text = displayText || 'Antigravity: No Data';
         barItem.tooltip = `Antigravity Quota Monitor - Click to view details`;
 
-        // Đổi màu nền thanh trạng thái nếu có bất kỳ pool nào sắp hết
-        const hasWarning = pools.some(p => p.totalPercent < 10);
         if (hasWarning) barItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
         else barItem.backgroundColor = undefined;
     }
