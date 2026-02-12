@@ -1,15 +1,15 @@
 // Copyright by AcmaTvirus
 import * as vscode from 'vscode';
-import { AccountService } from './services/account.service';
-import { QuotaService } from './services/quota.service';
-import { SchedulerService } from './services/scheduler.service';
+import { AccountService } from './core/account.service';
+import { QuotaService } from './core/quota.service';
+import { SchedulerService } from './core/scheduler.service';
 import { DashboardProvider } from './views/dashboard.provider';
-import { AutomationService } from './services/automation.service';
-import { LogService, LogLevel } from './services/log.service';
-import { NotificationService } from './services/notification.service';
-import { AnalyticsService } from './services/analytics.service';
-import { CdpService } from './services/cdp.service';
-import { WebServerService } from './services/webserver.service';
+import { AutomationService } from './automation/automation.service';
+import { LogService, LogLevel } from './core/log.service';
+import { NotificationService } from './core/notification.service';
+import { AnalyticsService } from './core/analytics.service';
+import { CdpService } from './automation/cdp.service';
+import { WebServerService } from './server/webserver.service';
 
 export function activate(context: vscode.ExtensionContext) {
     try {

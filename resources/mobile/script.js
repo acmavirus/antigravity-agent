@@ -3,6 +3,57 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentData = null;
     let streamInterval = null;
     let activeTargetId = null;
+    let authToken = localStorage.getItem('antigravity_token');
+
+    // Helper fetch có kèm token
+    async function authenticatedFetch(url, options = {}) {
+        const headers = {
+            ...options.headers,
+            'Authorization': `Bearer ${authToken}`
+        };
+        const res = await fetch(url, { ...options, headers });
+        if (res.status === 401) {
+            showLogin();
+            throw new Error('Unauthorized');
+        }
+        return res;
+    }
+
+    // Auth UI Logic
+    function showLogin() {
+        document.getElementById('login-overlay').style.display = 'flex';
+        document.body.classList.add('overflow-hidden');
+    }
+
+    function hideLogin() {
+        document.getElementById('login-overlay').style.display = 'none';
+        document.body.classList.remove('overflow-hidden');
+    }
+
+    document.getElementById('login-btn').onclick = async () => {
+        const pin = document.getElementById('pin-input').value;
+        if (!pin) return;
+
+        try {
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pin })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                authToken = data.token;
+                localStorage.setItem('antigravity_token', authToken);
+                hideLogin();
+                fetchData();
+            } else {
+                alert('Mã PIN không chính xác!');
+            }
+        } catch (e) {
+            alert('Lỗi kết nối server!');
+        }
+    };
 
     // Tab Switching
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -34,15 +85,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     async function fetchData() {
+        if (!authToken) { showLogin(); return; }
         try {
-            const res = await fetch('/api/status');
+            const res = await authenticatedFetch('/api/status');
             const data = await res.json();
             currentData = data;
             renderAll();
         } catch (e) {
-            console.error('Fetch error:', e);
-            document.getElementById('connection-status').innerText = 'OFFLINE';
-            document.getElementById('live-dot').style.backgroundColor = 'var(--danger)';
+            if (e.message !== 'Unauthorized') {
+                console.error('Fetch error:', e);
+                document.getElementById('connection-status').innerText = 'OFFLINE';
+                document.getElementById('live-dot').style.backgroundColor = 'var(--danger)';
+            }
         }
     }
 
@@ -53,7 +107,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('live-dot').style.backgroundColor = 'var(--success)';
         document.getElementById('active-sessions-count').innerText = currentData.monitor.filter(m => m.connected).length;
 
-        // Render Tunnel Area
         const tunnelArea = document.getElementById('tunnel-area');
         const urlInput = document.getElementById('public-url-input');
         const passInput = document.getElementById('tunnel-pass-input');
@@ -132,19 +185,15 @@ document.addEventListener('DOMContentLoaded', () => {
         `).join('');
     }
 
-    // Copy Helper
     function copyToClipboard(inputEl, btnId) {
         inputEl.select();
         document.execCommand('copy');
-
         const btn = document.getElementById(btnId);
         const icon = btn.querySelector('i');
         const oldClass = icon.className;
-
         icon.className = 'fas fa-check';
         btn.style.borderColor = 'var(--success)';
         btn.style.color = 'var(--success)';
-
         setTimeout(() => {
             icon.className = oldClass;
             btn.style.borderColor = '';
@@ -167,7 +216,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('stream-container');
         const icon = document.querySelector('#toggle-expand-btn i');
         container.classList.toggle('expanded');
-
         if (container.classList.contains('expanded')) {
             icon.className = 'fas fa-compress';
         } else {
@@ -175,17 +223,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Focus Mode Logic
     document.querySelectorAll('.focus-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const focus = btn.dataset.focus;
             const img = document.getElementById('stream-img');
-
-            // Update buttons
             document.querySelectorAll('.focus-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-
-            // Update image class
             img.className = '';
             img.classList.add(`focus-${focus}`);
         });
@@ -195,7 +238,6 @@ document.addEventListener('DOMContentLoaded', () => {
         activeTargetId = id;
         switchTab('live');
         document.getElementById('live-page-title').innerText = 'Live: ' + id;
-
         if (streamInterval) clearInterval(streamInterval);
         streamInterval = setInterval(updateStream, 2000);
         updateStream();
@@ -209,8 +251,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function updateStream() {
         if (!activeTargetId) return;
-        const img = document.getElementById('stream-img');
-        img.src = `/api/screenshot/${activeTargetId}?t=${Date.now()}`;
+        try {
+            const res = await authenticatedFetch(`/api/screenshot/${activeTargetId}`);
+            const blob = await res.blob();
+            document.getElementById('stream-img').src = URL.createObjectURL(blob);
+        } catch (e) { }
     }
 
     document.getElementById('send-cmd-btn').onclick = async () => {
@@ -220,7 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         input.disabled = true;
         try {
-            await fetch('/api/inject', {
+            await authenticatedFetch('/api/inject', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: activeTargetId, text })
@@ -235,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const btn = document.getElementById('accept-btn');
         btn.disabled = true;
         try {
-            await fetch('/api/accept', {
+            await authenticatedFetch('/api/accept', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: activeTargetId })
@@ -248,8 +293,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.switchAccount = async (id) => {
         if (!confirm('Chuyển sang tài khoản này?')) return;
-        await fetch(`/api/switch/${id}`, { method: 'POST' });
-        fetchData();
+        try {
+            await authenticatedFetch(`/api/switch/${id}`, { method: 'POST' });
+            fetchData();
+        } catch (e) { }
     };
 
     setInterval(fetchData, 5000);

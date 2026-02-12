@@ -23,29 +23,30 @@
         try {
             // 1. Kiểm tra kích thước cơ bản
             const rect = el.getBoundingClientRect();
-            if (rect.width < 5 || rect.height < 5) return false;
+            if (rect.width < 2 || rect.height < 2) return false;
 
-            // 2. Kiểm tra visibility/opacity của chính nó và cha
+            // 2. Kiểm tra visibility/opacity
             const style = window.getComputedStyle(el);
-            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+            if (style.display === 'none' || style.visibility === 'hidden') return false;
+            if (parseFloat(style.opacity) < 0.1) return false;
 
             // 3. Kiểm tra xem có nằm trong vùng bị ẩn (ví dụ tab không active)
-            // Trong VS Code/Cursor, các tab không active thường nằm trong container có display: none hoặc aria-hidden=true
             let parent = el.parentElement;
             while (parent) {
                 const pStyle = window.getComputedStyle(parent);
                 if (pStyle.display === 'none' || parent.getAttribute('aria-hidden') === 'true') {
                     return false;
                 }
-                // Nếu thấy container của workbench chat mà không phải là view hiện tại
-                if (parent.classList.contains('hidden')) return false;
+                if (parent.classList.contains('hidden') && !parent.classList.contains('monaco-search-container')) return false;
                 parent = parent.parentElement;
             }
 
-            // 4. Kiểm tra vị trí (nằm trong viewport)
-            if (rect.top < 0 || rect.left < 0 || rect.bottom > window.innerHeight || rect.right > window.innerWidth) {
-                // Đôi khi các nút trong panel vẫn được tính, nhưng nếu nó quá xa viewport thì bỏ qua
-                if (rect.bottom < 0 || rect.top > window.innerHeight) return false;
+            // 4. Kiểm tra vị trí (nằm trong hoặc gần viewport)
+            // Nới rộng biên lên 100px
+            const buffer = 100;
+            if (rect.bottom < -buffer || rect.top > window.innerHeight + buffer ||
+                rect.right < -buffer || rect.left > window.innerWidth + buffer) {
+                return false;
             }
 
             return true;
@@ -104,41 +105,66 @@
             '.composer-container',
             '.interactive-container',
             '.ai-chat-view',
-            '.pane-body', // Thường là nội dung của các Sidebar pane
+            '.pane-body',
             '[id*="chat"]',
-            '[class*="chat"]'
+            '[class*="chat"]',
+            '[class*="ai-"]',
+            '[class*="agent"]',
+            '.monaco-dialog-box', // Đưa thêm box thoại vào nếu nó chứa từ khóa accept
+            'body' // Thêm body làm fallback cuối cùng nếu không tìm thấy container đặc thù
         ];
 
-        // Tìm tất cả các rễ (document + shadow roots của webviews)
-        const roots = [document];
-        const hosts = document.querySelectorAll('.webview.ready');
-        hosts.forEach(h => { if (h.shadowRoot) roots.push(h.shadowRoot); });
+        // Hàm đệ quy tìm tất cả các shadow roots
+        const getAllRoots = (root) => {
+            let all = [root];
+            const children = root.querySelectorAll('*');
+            for (let i = 0; i < children.length; i++) {
+                if (children[i].shadowRoot) {
+                    all = all.concat(getAllRoots(children[i].shadowRoot));
+                }
+            }
+            return all;
+        };
 
-        const buttonSelectors = ['button', '.monaco-button', '.bg-ide-button-background', '[role="button"]'];
+        let roots = [document];
+        try {
+            roots = getAllRoots(document);
+        } catch (e) { }
 
-        roots.forEach(root => {
-            // Duyệt qua từng container của Agent
-            agentSelectors.forEach(agentSel => {
-                const containers = root.querySelectorAll(agentSel);
-                containers.forEach(container => {
-                    // Chỉ tìm nút bấm bên trong container này
-                    buttonSelectors.forEach(btnSel => {
-                        const els = container.querySelectorAll(btnSel);
+        const buttonSelectors = ['button', '.monaco-button', '.bg-ide-button-background', '[role="button"]', '.action-label', 'a.button'];
+
+        for (const root of roots) {
+            for (const agentSel of agentSelectors) {
+                // Nếu agentSel là body hoặc container lớn, ta tìm nút bên trong
+                const containers = (agentSel === 'body') ? [root] : root.querySelectorAll(agentSel);
+                if (!containers || containers.length === 0) continue;
+
+                for (const container of containers) {
+                    for (const btnSel of buttonSelectors) {
+                        const els = (container === root && root.querySelectorAll) ? root.querySelectorAll(btnSel) : container.querySelectorAll(btnSel);
+                        if (!els) continue;
+
                         for (let i = 0; i < els.length; i++) {
                             const el = els[i];
                             if (isActionable(el)) {
                                 state.buttonCache.set(el, Date.now());
-                                log("Auto-Accepting in Agent View: " + el.textContent);
+                                console.log("[Antigravity Agent] Auto-Accepting:", el.innerText || el.getAttribute('aria-label'));
 
-                                if (typeof el.click === 'function') el.click();
-                                el.dispatchEvent(new MouseEvent('click', { view: window, bubbles: true, cancelable: true }));
-                                return; // Dừng quét sau khi tìm thấy 1 nút hợp lệ
+                                if (typeof el.click === 'function') {
+                                    el.click();
+                                }
+                                // Giả lập chuỗi sự kiện đầy đủ để kích hoạt các framework như React/Vue
+                                const opts = { view: window, bubbles: true, cancelable: true };
+                                el.dispatchEvent(new MouseEvent('mousedown', opts));
+                                el.dispatchEvent(new MouseEvent('mouseup', opts));
+                                el.dispatchEvent(new MouseEvent('click', opts));
+                                return;
                             }
                         }
-                    });
-                });
-            });
-        });
+                    }
+                }
+            }
+        }
     };
 
     window.__autoAcceptStart = function (config) {

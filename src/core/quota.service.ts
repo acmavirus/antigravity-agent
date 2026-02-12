@@ -138,7 +138,11 @@ export class QuotaService {
             }
 
             try {
-                const freshQuotas = await this.fetchQuotaRealtime(account);
+                // Lấy thông tin tài khoản đầy đủ (bao gồm cả data bí mật)
+                const fullAccount = await this.accountService.getAccountWithData(account.id);
+                if (!fullAccount) continue;
+
+                const freshQuotas = await this.fetchQuotaRealtime(fullAccount);
                 if (freshQuotas && freshQuotas.length > 0) {
                     const existingQuotas = this.getCachedQuotas(account.id) || [];
 

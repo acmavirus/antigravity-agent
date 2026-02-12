@@ -32,31 +32,34 @@ export interface Account {
     id: string;
     name: string;
     type: 'google' | 'json' | 'key' | 'client';
-    data: any;
     status: AccountStatus;
     lastChecked: number;
     proxy?: ProxyConfig;
     stats?: UsageStats;
     automationSettings?: {
-        autoSwitchThreshold: number; // Tỉ lệ % còn lại để tự động chuyển (vd: 5%)
+        autoSwitchThreshold: number;
         excludeCommands?: string[];
     };
+    // Dữ liệu thực thi sẽ được load từ SecretStorage bằng ID
+    data?: any;
 }
 
 export class AccountService {
     private accounts: Account[] = [];
     private mutex = new Mutex();
-    private readonly STORAGE_KEY = 'antigravity.accounts';
+    private readonly STORAGE_KEY = 'antigravity.accounts.metadata';
+    private readonly SECRET_PREFIX = 'antigravity.secret.';
 
     constructor(private context: vscode.ExtensionContext) {
         this.loadAccounts();
     }
 
-    private loadAccounts() {
+    private async loadAccounts() {
         const data = this.context.globalState.get<string>(this.STORAGE_KEY);
         if (data) {
             try {
                 this.accounts = JSON.parse(data);
+                // Load dữ liệu từ secrets một cách lười (on-demand) hoặc ngay lập tức nếu cần
             } catch (e) {
                 this.accounts = [];
             }
@@ -64,7 +67,18 @@ export class AccountService {
     }
 
     private async saveAccounts() {
-        await this.context.globalState.update(this.STORAGE_KEY, JSON.stringify(this.accounts));
+        // Chỉ lưu metadata vào globalState
+        const metadata = this.accounts.map(({ data, ...rest }) => rest);
+        await this.context.globalState.update(this.STORAGE_KEY, JSON.stringify(metadata));
+    }
+
+    private async saveSecret(id: string, data: any) {
+        await this.context.secrets.store(`${this.SECRET_PREFIX}${id}`, JSON.stringify(data));
+    }
+
+    private async getSecret(id: string): Promise<any> {
+        const secret = await this.context.secrets.get(`${this.SECRET_PREFIX}${id}`);
+        return secret ? JSON.parse(secret) : null;
     }
 
     public getAccounts(): Account[] {
@@ -74,37 +88,41 @@ export class AccountService {
     public async addAccount(input: string) {
         const release = await this.mutex.acquire();
         try {
-            let newAccount: Account;
+            let newAccountData: any;
+            let name: string;
+            let type: any;
+
             if (input.startsWith('{')) {
                 const data = JSON.parse(input);
-                newAccount = {
-                    id: Date.now().toString(),
-                    name: data.name || `Account ${this.accounts.length + 1}`,
-                    type: 'json',
-                    data: data,
-                    status: AccountStatus.Active,
-                    lastChecked: Date.now()
-                };
+                newAccountData = data;
+                name = data.name || `Account ${this.accounts.length + 1}`;
+                type = 'json';
             } else {
-                newAccount = {
-                    id: Date.now().toString(),
-                    name: `Key Account ${this.accounts.length + 1}`,
-                    type: 'key',
-                    data: { key: input },
-                    status: AccountStatus.Active,
-                    lastChecked: Date.now()
-                };
+                newAccountData = { key: input };
+                name = `Key Account ${this.accounts.length + 1}`;
+                type = 'key';
             }
 
-            const existingIndex = this.accounts.findIndex(a => a.name === newAccount.name);
+            const id = Date.now().toString();
+            const newAccount: Account = {
+                id,
+                name,
+                type,
+                status: AccountStatus.Active,
+                lastChecked: Date.now()
+            };
+
+            const existingIndex = this.accounts.findIndex(a => a.name === name);
             if (existingIndex !== -1) {
-                this.accounts[existingIndex].data = newAccount.data;
-                this.accounts[existingIndex].status = newAccount.status;
+                const existingId = this.accounts[existingIndex].id;
+                this.accounts[existingIndex].status = AccountStatus.Active;
                 this.accounts[existingIndex].lastChecked = Date.now();
-                vscode.window.showInformationMessage(`Account updated: ${newAccount.name}`);
+                await this.saveSecret(existingId, newAccountData);
+                vscode.window.showInformationMessage(`Account updated: ${name}`);
             } else {
                 this.accounts.push(newAccount);
-                vscode.window.showInformationMessage(`Account added: ${newAccount.name}`);
+                await this.saveSecret(id, newAccountData);
+                vscode.window.showInformationMessage(`Account added: ${name}`);
             }
             await this.saveAccounts();
         } catch (e) {
@@ -124,8 +142,14 @@ export class AccountService {
     }
 
     public async removeAccount(id: string) {
-        this.accounts = this.accounts.filter(a => a.id !== id);
-        await this.saveAccounts();
+        const release = await this.mutex.acquire();
+        try {
+            this.accounts = this.accounts.filter(a => a.id !== id);
+            await this.context.secrets.delete(`${this.SECRET_PREFIX}${id}`);
+            await this.saveAccounts();
+        } finally {
+            release();
+        }
     }
 
     public async autoImport() {
@@ -149,22 +173,22 @@ export class AccountService {
 
                     const existingIndex = this.accounts.findIndex(a => a.name === email);
                     if (existingIndex !== -1) {
-                        // Update existing session
-                        this.accounts[existingIndex].data = { raw: result };
+                        const existingId = this.accounts[existingIndex].id;
                         this.accounts[existingIndex].lastChecked = Date.now();
+                        await this.saveSecret(existingId, { raw: result });
                         await this.saveAccounts();
                         vscode.window.showInformationMessage(`Session synced: ${email}`);
                         return true;
                     } else {
-                        // Add new
+                        const id = `antigravity-${Date.now()}`;
                         this.accounts.push({
-                            id: `antigravity-${Date.now()}`,
+                            id,
                             name: email,
                             type: 'client',
-                            data: { raw: result },
                             status: AccountStatus.Active,
                             lastChecked: Date.now()
                         });
+                        await this.saveSecret(id, { raw: result });
                         await this.saveAccounts();
                         vscode.window.showInformationMessage(`Account automatically imported: ${email}`);
                         return true;
@@ -176,14 +200,15 @@ export class AccountService {
             if (session) {
                 const existing = this.accounts.find(a => a.name === session.account.label);
                 if (!existing) {
+                    const id = `vsc-${Date.now()}`;
                     this.accounts.push({
-                        id: `vsc-${Date.now()}`,
+                        id,
                         name: session.account.label,
                         type: 'client',
-                        data: { session: session.id },
                         status: AccountStatus.Active,
                         lastChecked: Date.now()
                     });
+                    await this.saveSecret(id, { session: session.id });
                     await this.saveAccounts();
                     return true;
                 }
@@ -199,9 +224,6 @@ export class AccountService {
         }
     }
 
-    /**
-     * Lấy email của tài khoản đang hoạt động thực tế trong Antigravity DB
-     */
     public async getActiveEmail(): Promise<string | null> {
         if (process.platform !== 'win32') return null;
 
@@ -225,25 +247,24 @@ export class AccountService {
         return null;
     }
 
-    /**
-     * Chuyển đổi tài khoản bằng cách ghi đè session vào Antigravity DB
-     */
     public async switchAccount(id: string) {
-        const account = this.accounts.find(a => a.id === id);
-        if (!account || !account.data?.raw) {
-            vscode.window.showErrorMessage('Invalid account or missing session data.');
-            return;
-        }
-
-        const dbPath = path.join(os.homedir(), 'AppData', 'Roaming', 'Antigravity', 'User', 'globalStorage', 'state.vscdb');
+        const release = await this.mutex.acquire();
         const tempSqlPath = path.join(os.tmpdir(), `antigravity_switch_${Date.now()}.sql`);
 
-        // Thoát dấu nháy đơn trong chuỗi raw session để dùng trong SQL
-        const escapedValue = account.data.raw.replace(/'/g, "''");
-        const sqlQuery = `UPDATE ItemTable SET value = '${escapedValue}' WHERE key = 'jetskiStateSync.agentManagerInitState';`;
-
         try {
-            // Ghi query vào file tạm để tránh lỗi ENAMETOOLONG trên Windows CLI
+            const account = this.accounts.find(a => a.id === id);
+            const secretData = await this.getSecret(id);
+
+            if (!account || !secretData?.raw) {
+                vscode.window.showErrorMessage('Invalid account or missing session data.');
+                return;
+            }
+
+            const dbPath = path.join(os.homedir(), 'AppData', 'Roaming', 'Antigravity', 'User', 'globalStorage', 'state.vscdb');
+
+            const escapedValue = secretData.raw.replace(/'/g, "''");
+            const sqlQuery = `UPDATE ItemTable SET value = '${escapedValue}' WHERE key = 'jetskiStateSync.agentManagerInitState';`;
+
             fs.writeFileSync(tempSqlPath, sqlQuery, 'utf8');
 
             const command = `sqlite3 "${dbPath}" < "${tempSqlPath}"`;
@@ -255,13 +276,24 @@ export class AccountService {
                 });
             });
 
-            // Xóa file tạm ngay sau khi xong
-            if (fs.existsSync(tempSqlPath)) fs.unlinkSync(tempSqlPath);
-
             vscode.window.showInformationMessage(`Switched to account: ${account.name}. Please restart Antigravity to apply.`);
         } catch (e: any) {
-            if (fs.existsSync(tempSqlPath)) fs.unlinkSync(tempSqlPath);
             vscode.window.showErrorMessage(`Error switching account: ${e.message}`);
+        } finally {
+            if (fs.existsSync(tempSqlPath)) fs.unlinkSync(tempSqlPath);
+            release();
         }
+    }
+
+    /**
+     * Lấy dữ liệu đầy đủ bao gồm cả bí mật (Dùng nội bộ)
+     */
+    public async getAccountWithData(id: string): Promise<Account | null> {
+        const account = this.accounts.find(a => a.id === id);
+        if (account) {
+            const data = await this.getSecret(id);
+            return { ...account, data };
+        }
+        return null;
     }
 }

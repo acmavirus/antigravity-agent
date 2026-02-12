@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import { QuotaService } from '../services/quota.service';
-import { AccountService } from '../services/account.service';
-import { LogService } from '../services/log.service';
-import { AnalyticsService } from '../services/analytics.service';
-import { CdpService } from '../services/cdp.service';
+import { QuotaService } from '../core/quota.service';
+import { AccountService } from '../core/account.service';
+import { LogService } from '../core/log.service';
+import { AnalyticsService } from '../core/analytics.service';
+import { CdpService } from '../automation/cdp.service';
 
 export class DashboardProvider implements vscode.WebviewViewProvider {
     constructor(
@@ -24,6 +24,8 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
             enableScripts: true,
             localResourceRoots: [this.extensionUri]
         };
+
+        this.lastDataSnapshot = ''; // Reset để đảm bảo lần đầu tiên luôn gửi dữ liệu mới cho webview vừa tạo
 
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
@@ -95,7 +97,6 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         const analytics = this.analyticsService.getUsageHistory();
         const monitor = this.cdpService.getConnectionInfo();
 
-        // Tạo snapshot để so sánh
         const currentData = {
             accounts,
             logs,
@@ -105,7 +106,6 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
         const currentSnapshot = JSON.stringify(currentData);
 
-        // CHỈ gửi tin nhắn nếu dữ liệu thực sự thay đổi
         if (currentSnapshot !== this.lastDataSnapshot) {
             this.lastDataSnapshot = currentSnapshot;
             webviewView.webview.postMessage({
@@ -152,24 +152,19 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         </nav>
 
         <main id="tab-content">
-            <!-- ACCOUNT TAB -->
             <div id="accounts-tab" class="tab-pane active">
                 <div id="account-list" class="account-grid">
-                    <div class="loading">Loading data...</div>
                 </div>
             </div>
 
-            <!-- ANALYTICS TAB -->
             <div id="analytics-tab" class="tab-pane">
                 <div class="analytics-container">
                     <h3>Usage Stats (7 days)</h3>
                     <div id="analytics-chart" class="chart-container">
-                        <!-- Chart will be injected here -->
                     </div>
                 </div>
             </div>
 
-            <!-- MONITOR TAB -->
             <div id="monitor-tab" class="tab-pane">
                 <div class="monitor-container">
                     <div class="monitor-header">
@@ -177,25 +172,22 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                         <div id="monitor-status-badge" class="badge">CDP: Idle</div>
                     </div>
                     <div id="monitor-target-list" class="monitor-grid">
-                        <!-- Target items will be injected here -->
                         <div class="empty-state">No active sessions found.</div>
                     </div>
                 </div>
             </div>
 
-            <!-- LOGS TAB -->
             <div id="logs-tab" class="tab-pane">
                 <div class="logs-header">
                     <h3>System Activities</h3>
                     <button id="clearLogsBtn" title="Clear Logs"><i class="codicon codicon-trash"></i></button>
                 </div>
                 <div id="log-list" class="log-timeline">
-                    <!-- Logs will be injected here -->
                 </div>
             </div>
         </main>
 
-        <div id="settings-panel" class="settings-panel hidden">
+        <div id="settings-panel" class="settings-panel">
             <div class="settings-header">
                 <h3>Advanced Configuration</h3>
                 <button id="closeSettingsBtn"><i class="codicon codicon-close"></i></button>

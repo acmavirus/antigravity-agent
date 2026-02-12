@@ -1,10 +1,10 @@
 // Copyright by AcmaTvirus
 import * as vscode from 'vscode';
-import { AccountService } from './account.service';
-import { QuotaService } from './quota.service';
-import { LogService, LogLevel } from './log.service';
-import { NotificationService } from './notification.service';
-import { AnalyticsService } from './analytics.service';
+import { AccountService } from '../core/account.service';
+import { QuotaService } from '../core/quota.service';
+import { LogService, LogLevel } from '../core/log.service';
+import { NotificationService } from '../core/notification.service';
+import { AnalyticsService } from '../core/analytics.service';
 import { CdpService } from './cdp.service';
 
 /**
