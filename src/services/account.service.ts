@@ -7,6 +7,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import { ProtobufDecoder } from '../api/protobuf/decoder';
 import { Account, AccountStatus } from '../interfaces/account.interface';
+import axios from 'axios';
 
 export class AccountService {
     private accounts: Account[] = [];
@@ -115,7 +116,20 @@ export class AccountService {
         }
     }
 
-    public async autoImport() {
+    private async fetchEmailFromToken(accessToken: string): Promise<string | null> {
+        try {
+            const response = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { 'Authorization': `Bearer ${accessToken}` },
+                timeout: 5000
+            });
+            return response.data.email || null;
+        } catch (e) {
+            console.error('[AccountService] Failed to fetch email from API:', e);
+            return null;
+        }
+    }
+
+    public async autoImport(): Promise<boolean> {
         const release = await this.mutex.acquire();
         try {
             if (process.platform === 'win32') {
@@ -142,7 +156,10 @@ export class AccountService {
                     const resultHex = await runQuery(query);
 
                     if (resultHex && resultHex !== 'ERROR' && resultHex !== '') {
-                        const cleanHex = resultHex.replace(/\s+/g, '');
+                        // Làm sạch hex string (loại bỏ khoảng trắng, null bytes, BOM...)
+                        const cleanHex = resultHex.replace(/[^0-9A-Fa-f]/g, '');
+                        if (cleanHex.length === 0) continue;
+
                         let buffer: Buffer;
                         let rawData: string;
 
@@ -150,18 +167,15 @@ export class AccountService {
                         if (key === 'antigravityUnifiedStateSync.oauthToken') {
                             const hexBuffer = Buffer.from(cleanHex, 'hex');
                             // Thử decode dưới dạng UTF-8 string (để lấy base64)
-                            // Nếu hex string này thực ra là hex của base64 string
-                            const potentialBase64 = hexBuffer.toString('utf8');
+                            const potentialBase64 = hexBuffer.toString('utf8').trim();
 
                             // Kiểm tra sơ bộ xem có phải base64 string hợp lệ không
-                            // (Chứa ký tự alnum, +, /, =)
                             if (/^[A-Za-z0-9+/=]+$/.test(potentialBase64)) {
                                 buffer = Buffer.from(potentialBase64, 'base64');
                                 rawData = potentialBase64;
                             } else {
-                                // Nếu không, fallback về coi như raw binary (blob)
-                                buffer = Buffer.from(cleanHex, 'hex');
-                                rawData = buffer.toString('base64');
+                                buffer = hexBuffer;
+                                rawData = hexBuffer.toString('base64');
                             }
                         } else {
                             buffer = Buffer.from(cleanHex, 'hex');
@@ -169,27 +183,73 @@ export class AccountService {
                         }
 
                         const session = ProtobufDecoder.decode(buffer);
-                        const email = session?.context?.email;
 
-                        if (email) {
+                        // Cập nhật email: Ưu tiên API > Local Status > Protobuf
+                        let email = session?.context?.email;
+
+                        // 1. Thử lấy từ API Google nếu có access_token
+                        if (session?.auth?.access_token) {
+                            const apiEmail = await this.fetchEmailFromToken(session.auth.access_token);
+                            if (apiEmail) {
+                                email = apiEmail;
+                            }
+                        }
+
+                        // 2. Nếu vẫn chưa có hoặc là fallback, thử lấy từ userStatus
+                        if (!email || email === 'auto-imported-account@gmail.com') {
+                            try {
+                                const userStatusHex = await runQuery(`SELECT hex(value) FROM ItemTable WHERE key = 'antigravityUnifiedStateSync.userStatus'`);
+                                if (userStatusHex && userStatusHex !== 'ERROR' && userStatusHex !== '') {
+                                    const cleanStatusHex = userStatusHex.replace(/[^0-9A-Fa-f]/g, '');
+                                    const statusBuf = Buffer.from(cleanStatusHex, 'hex');
+                                    const statusStr = statusBuf.toString('utf8');
+                                    const emailMatch = statusStr.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+                                    if (emailMatch) {
+                                        email = emailMatch[0];
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('[AccountService] Failed to extract email from userStatus:', e);
+                            }
+                        }
+
+                        if (session && session.auth && email) {
+                            const accountData = {
+                                ...session,
+                                raw: buffer.toString('base64'),
+                                context: {
+                                    ...session.context,
+                                    email: email
+                                },
+                                auth: {
+                                    ...session.auth,
+                                    id_token: session.auth.id_token || ""
+                                }
+                            };
+
+                            // Đảm bảo id_token tồn tại
+                            if (!accountData.auth.id_token) {
+                                accountData.auth.id_token = "";
+                            }
+
                             const existingIndex = this.accounts.findIndex(a => a.name === email);
                             if (existingIndex !== -1) {
                                 const existingId = this.accounts[existingIndex].id;
                                 this.accounts[existingIndex].lastChecked = Date.now();
-                                await this.saveSecret(existingId, { raw: rawData });
+                                await this.saveSecret(existingId, accountData);
                                 await this.saveAccounts();
                                 vscode.window.showInformationMessage(`Session synced: ${email}`);
                                 return true;
                             } else {
-                                const id = `antigravity-${Date.now()}`;
+                                const id = `auto-${Buffer.from(email).toString('hex').substring(0, 8)}`;
                                 this.accounts.push({
                                     id,
                                     name: email,
-                                    type: 'client',
                                     status: AccountStatus.Active,
+                                    type: 'antigravity',
                                     lastChecked: Date.now()
                                 });
-                                await this.saveSecret(id, { raw: rawData });
+                                await this.saveSecret(id, accountData);
                                 await this.saveAccounts();
                                 vscode.window.showInformationMessage(`Account automatically imported: ${email}`);
                                 return true;
@@ -261,17 +321,19 @@ export class AccountService {
             for (const key of keysToCheck) {
                 const resultHex = await runQuery(`SELECT hex(value) FROM ItemTable WHERE key = '${key}'`);
 
-                if (resultHex) {
-                    const cleanHex = resultHex.replace(/\s+/g, '');
+                if (resultHex && resultHex !== 'ERROR' && resultHex !== '') {
+                    const cleanHex = resultHex.replace(/[^0-9A-Fa-f]/g, '');
+                    if (cleanHex.length === 0) continue;
+
                     let buffer: Buffer;
 
                     if (key === 'antigravityUnifiedStateSync.oauthToken') {
                         const hexBuffer = Buffer.from(cleanHex, 'hex');
-                        const base64String = hexBuffer.toString('utf8');
+                        const base64String = hexBuffer.toString('utf8').trim();
                         if (/^[A-Za-z0-9+/=]+$/.test(base64String)) {
                             buffer = Buffer.from(base64String, 'base64');
                         } else {
-                            buffer = Buffer.from(cleanHex, 'hex');
+                            buffer = hexBuffer;
                         }
                     } else {
                         buffer = Buffer.from(cleanHex, 'hex');
@@ -359,7 +421,13 @@ export class AccountService {
             }
 
             if (success) {
-                vscode.window.showInformationMessage(`Account switched to ${account.name}.`);
+                const reload = await vscode.window.showInformationMessage(
+                    `Account switched to ${account.name}. Reload window to apply changes?`,
+                    'Reload Now'
+                );
+                if (reload === 'Reload Now') {
+                    vscode.commands.executeCommand('workbench.action.reloadWindow');
+                }
             } else {
                 vscode.window.showErrorMessage(`Switch failed: ${lastError}`);
             }

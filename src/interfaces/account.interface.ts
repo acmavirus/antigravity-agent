@@ -22,7 +22,7 @@ export interface UsageStats {
 export interface Account {
     id: string;
     name: string;
-    type: 'google' | 'json' | 'key' | 'client';
+    type: 'google' | 'json' | 'key' | 'client' | 'antigravity';
     status: AccountStatus;
     lastChecked: number;
     proxy?: ProxyConfig;

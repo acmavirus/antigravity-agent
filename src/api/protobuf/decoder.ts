@@ -63,34 +63,108 @@ export class ProtobufDecoder {
             }
 
             const SessionResponse = this.getRoot().lookupType("google.internal.antigravity.SessionResponse");
-            try {
-                const message = SessionResponse.decode(buffer);
-                const obj = SessionResponse.toObject(message, {
-                    defaults: true,
-                    enums: String,
-                    longs: String,
-                    bytes: String,
-                });
-                if (obj.context?.email) return obj;
-            } catch (e) {
-                // Ignore, try other format
-            }
+            
+            // Hàm helper để giải mã từ buffer tiềm năng là session data
+            const tryDecodeSession = (buf: Buffer): any => {
+                    // 1. Thử giải mã Protobuf chuẩn
+                    try {
+                        const message = SessionResponse.decode(buf);
+                        const obj = SessionResponse.toObject(message, {
+                            defaults: true,
+                            enums: String,
+                            longs: String,
+                            bytes: String,
+                        });
+                        
+                        // Cố gắng tìm email thực từ context
+                        let foundEmail = obj.context?.email;
+                        if (!foundEmail || foundEmail === "auto-imported-account@gmail.com") {
+                            // Thử tìm trong các trường khác của obj nếu có (ví dụ: user.email)
+                            if (obj.user?.email) foundEmail = obj.user.email;
+                            else if (obj.auth?.user_email) foundEmail = obj.auth.user_email;
+                        }
 
-            // Try decoding as TokenInfo wrapper
+                        if (obj.auth?.access_token && obj.auth.access_token.length > 50) {
+                            obj.context = obj.context || {};
+                            obj.context.email = foundEmail || "auto-imported-account@gmail.com";
+                            return obj;
+                        }
+                    } catch (e) {}
+
+                // 2. Thử giải mã nếu là raw string (ví dụ: ya29.a0AUM...)
+                const str = buf.toString('utf8');
+                if (str.startsWith('ya29.')) {
+                    return {
+                        auth: { access_token: str, id_token: "" },
+                        context: { email: "auto-imported-account@gmail.com" }
+                    };
+                }
+                return null;
+            };
+
+            // Thử giải mã trực tiếp
+            const direct = tryDecodeSession(buffer);
+            if (direct) return direct;
+
+            // Thử giải mã qua TokenInfo wrapper
             const TokenInfo = this.getRoot().lookupType("TokenInfo");
             try {
-                const tokenMsg = TokenInfo.decode(buffer);
-                const tokenObj = TokenInfo.toObject(tokenMsg);
+                // Đôi khi buffer bị bọc thêm một lớp Protobuf nữa (field 1: bytes)
+                const reader = protobuf.Reader.create(buffer);
+                let wrappedBuffer: Buffer | null = null;
+                while (reader.pos < reader.len) {
+                    const tag = reader.uint32();
+                    if ((tag >>> 3) === 1 && (tag & 7) === 2) {
+                        wrappedBuffer = Buffer.from(reader.bytes());
+                        break;
+                    } else {
+                        reader.skipType(tag & 7);
+                    }
+                }
 
-                if (tokenObj.payload && tokenObj.payload.length > 0) {
-                    const payloadBuffer = tokenObj.payload; // Already Buffer/Uint8Array
-                    const innerMsg = SessionResponse.decode(payloadBuffer);
-                    return SessionResponse.toObject(innerMsg, {
-                        defaults: true,
-                        enums: String,
-                        longs: String,
-                        bytes: String,
-                    });
+                const tokenBuf = wrappedBuffer || buffer;
+                const tokenMsg = TokenInfo.decode(tokenBuf);
+                const tokenObj: any = TokenInfo.toObject(tokenMsg);
+
+                if (tokenObj.payload) {
+                    const payloadBytes = Buffer.from(tokenObj.payload);
+                    
+                    // Payload có thể là Protobuf chứa string sessionBase64 ở field 1
+                    let sessionBase64 = "";
+                    try {
+                        const payloadReader = protobuf.Reader.create(payloadBytes);
+                        while (payloadReader.pos < payloadReader.len) {
+                            const tag = payloadReader.uint32();
+                            if ((tag >>> 3) === 1 && (tag & 7) === 2) {
+                                sessionBase64 = payloadReader.string();
+                                break;
+                            } else {
+                                payloadReader.skipType(tag & 7);
+                            }
+                        }
+                    } catch (e) {
+                        sessionBase64 = payloadBytes.toString('utf8');
+                    }
+
+                    if (sessionBase64) {
+                        // Làm sạch base64 string
+                        sessionBase64 = sessionBase64.replace(/[^A-Za-z0-9+/=]/g, '');
+                        let sessionBuffer = Buffer.from(sessionBase64, 'base64');
+                        
+                        // Đôi khi sessionBuffer lại bị bọc thêm 1 lớp field 1: bytes
+                        try {
+                            const r = protobuf.Reader.create(sessionBuffer);
+                            if (r.pos < r.len) {
+                                const tag = r.uint32();
+                                if ((tag >>> 3) === 1 && (tag & 7) === 2) {
+                                    sessionBuffer = Buffer.from(r.bytes());
+                                }
+                            }
+                        } catch (e) {}
+
+                        const result = tryDecodeSession(sessionBuffer);
+                        if (result) return result;
+                    }
                 }
             } catch (e) {
                 // Ignore

@@ -2,7 +2,7 @@
     "name": "antigravity-agent",
     "displayName": "Antigravity Agent",
     "description": "Manage Accounts, Monitor Quotas & Automate AI Intelligence Activation.",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "publisher": "AcmaTvirus",
     "repository": {
         "type": "git",
