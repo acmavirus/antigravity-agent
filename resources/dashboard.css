@@ -197,6 +197,32 @@ h1 {
     flex-shrink: 0;
 }
 
+.status-badge {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    opacity: 0.8;
+}
+
+.status-active {
+    background: var(--success);
+    box-shadow: 0 0 4px var(--success);
+}
+
+.status-forbidden {
+    background: var(--error);
+    box-shadow: 0 0 4px var(--error);
+}
+
+.active-badge {
+    color: var(--success);
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    opacity: 0.9;
+}
+
 /* Card Body */
 .card-body {
     padding: 0 4px 8px 32px;
@@ -339,19 +365,22 @@ h1 {
 }
 
 .switch-btn {
-    background: rgba(128, 128, 128, 0.1);
-    color: var(--accent);
-    border: 1px solid var(--accent);
-    padding: 6px 14px;
-    border-radius: 8px;
-    font-size: 0.75rem;
-    font-weight: 600;
+    background: transparent;
+    color: var(--text-muted);
+    border: none;
+    padding: 4px;
     cursor: pointer;
+    opacity: 0.4;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .switch-btn:hover {
-    background: var(--accent);
-    color: white;
+    color: var(--accent);
+    opacity: 1;
+    transform: scale(1.1);
 }
 
 .active-label {

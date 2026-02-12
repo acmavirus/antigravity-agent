@@ -1,16 +1,35 @@
-# Copyright by AcmaTvirus
-
 # Dependencies
 node_modules/
 
 # Build artifacts
-out/
 dist/
+out/
 *.vsix
 *.zip
 *.tar.gz
+tsconfig.tsbuildinfo
 
-# Environment variables & Secrets
+# Agent & AI State
+.agent/
+.gemini/
+.cortex/
+.anthropic/
+
+# OS/System files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment & Secrets
 .env
 .env.*
 !.env.example
@@ -33,38 +52,19 @@ config.private.json
 !.vscode/extensions.json
 *.code-workspace
 
-# OS files
-.DS_Store
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Testing
-coverage/
-.nyc_output/
+# JetBrains
+.idea/
 
 # Temporary files
 tmp/
 temp/
-.cache
-.npm
+.cache/
+.npm/
 .eslintcache
 .stylelintcache
 
-# Backup files
+# Backup/Misc
 *.bak
 *.swp
 *~
 old/
-
-# TypeScript
-tsconfig.tsbuildinfo

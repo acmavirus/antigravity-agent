@@ -249,6 +249,7 @@ export class AccountService {
 
     public async switchAccount(id: string) {
         const release = await this.mutex.acquire();
+        console.log(`[AccountService] Initiating switch to account ID: ${id}`);
         const tempSqlPath = path.join(os.tmpdir(), `antigravity_switch_${Date.now()}.sql`);
 
         try {
@@ -256,29 +257,72 @@ export class AccountService {
             const secretData = await this.getSecret(id);
 
             if (!account || !secretData?.raw) {
-                vscode.window.showErrorMessage('Invalid account or missing session data.');
+                vscode.window.showErrorMessage('No session data found for this account.');
                 return;
             }
 
             const dbPath = path.join(os.homedir(), 'AppData', 'Roaming', 'Antigravity', 'User', 'globalStorage', 'state.vscdb');
+            if (!fs.existsSync(dbPath)) {
+                vscode.window.showErrorMessage('Antigravity database not found.');
+                return;
+            }
 
-            const escapedValue = secretData.raw.replace(/'/g, "''");
-            const sqlQuery = `UPDATE ItemTable SET value = '${escapedValue}' WHERE key = 'jetskiStateSync.agentManagerInitState';`;
+            // Chuyển Base64 sang Hex để ghi BLOB an toàn
+            const buffer = Buffer.from(secretData.raw, 'base64');
+            const hexValue = buffer.toString('hex');
 
+            // Ghi câu lệnh vào file tạm để tránh lỗi ENAMETOOLONG trên Windows
+            const sqlQuery = `UPDATE ItemTable SET value = X'${hexValue}' WHERE key = 'jetskiStateSync.agentManagerInitState';`;
             fs.writeFileSync(tempSqlPath, sqlQuery, 'utf8');
 
+            // Lệnh thực thi sử dụng input redirection từ file
             const command = `sqlite3 "${dbPath}" < "${tempSqlPath}"`;
 
-            await new Promise((resolve, reject) => {
-                exec(command, (error) => {
-                    if (error) reject(error);
-                    else resolve(true);
-                });
-            });
+            let success = false;
+            let lastError = '';
 
-            vscode.window.showInformationMessage(`Switched to account: ${account.name}. Please restart Antigravity to apply.`);
+            for (let attempt = 1; attempt <= 5; attempt++) {
+                try {
+                    console.log(`[AccountService] Write attempt ${attempt} for ${account.name}...`);
+                    await new Promise((resolve, reject) => {
+                        exec(command, (error, stdout, stderr) => {
+                            if (error) reject(new Error(stderr || error.message));
+                            else resolve(true);
+                        });
+                    });
+
+                    // Verify lại
+                    const verifyQuery = `SELECT hex(value) FROM ItemTable WHERE key = 'jetskiStateSync.agentManagerInitState';`;
+                    const verifyCommand = `sqlite3 "${dbPath}" "${verifyQuery}"`;
+                    const currentHex = await new Promise<string>((resolve) => {
+                        exec(verifyCommand, (error, stdout) => {
+                            resolve(stdout.trim().toLowerCase());
+                        });
+                    });
+
+                    if (currentHex === hexValue.toLowerCase()) {
+                        success = true;
+                        break;
+                    } else {
+                        throw new Error('Verification failed: Value mismatch.');
+                    }
+                } catch (e: any) {
+                    lastError = e.message;
+                    if (lastError.includes('locked')) {
+                        await new Promise(r => setTimeout(r, 500));
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            if (success) {
+                vscode.window.showInformationMessage(`Account switched to ${account.name}.`);
+            } else {
+                vscode.window.showErrorMessage(`Switch failed: ${lastError}`);
+            }
         } catch (e: any) {
-            vscode.window.showErrorMessage(`Error switching account: ${e.message}`);
+            console.error(`[AccountService] Critical error: ${e.message}`);
         } finally {
             if (fs.existsSync(tempSqlPath)) fs.unlinkSync(tempSqlPath);
             release();

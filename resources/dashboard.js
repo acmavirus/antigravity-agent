@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span class="account-name">${acc.name}</span>
                     </div>
                     <div class="header-right">
+                        ${!acc.isActive ? `<button class="switch-btn" data-id="${acc.id}" title="Switch Account"><i class="codicon codicon-play"></i></button>` : '<span class="active-badge" title="Active Account"><i class="codicon codicon-check"></i></span>'}
                         <span class="status-badge ${statusClass}"></span>
                         <button class="delete-btn" data-id="${acc.id}" title="Remove Account"><i class="codicon codicon-close"></i></button>
                     </div>
