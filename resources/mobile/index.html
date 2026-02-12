@@ -51,11 +51,15 @@
                 <span class="icon"><i class="fas fa-chart-line"></i></span>
                 <span class="text">Thống kê</span>
             </button>
+            <button class="tab-btn active" data-tab="live">
+                <span class="icon"><i class="fas fa-comments"></i></span>
+                <span class="text">Chat</span>
+            </button>
         </nav>
 
         <main id="content-area">
             <!-- Accounts Tab -->
-            <div id="accounts-tab" class="tab-content active">
+            <div id="accounts-tab" class="tab-content">
                 <div class="section-header">
                     <h2>Danh sách tài khoản</h2>
                     <button id="refresh-btn" class="icon-btn"><i class="fas fa-sync-alt"></i></button>
@@ -104,37 +108,50 @@
                 </div>
             </div>
 
-            <!-- Live View Tab (New Full Page) -->
-            <div id="live-tab" class="tab-content">
-                <div class="section-header">
-                    <h2 id="live-page-title">Live Engine</h2>
-                    <button class="back-to-mon icon-btn"><i class="fas fa-chevron-left"></i></button>
+            <!-- Live Chat Tab (Refactored) -->
+            <div id="live-tab" class="tab-content active">
+                <div class="live-agent-header">
+                    <div class="header-main">
+                        <span class="app-title">Antigravity Phone Connect</span>
+                        <div class="header-actions">
+                            <button id="global-stop-btn" class="stop-btn-red">STOP</button>
+                            <button id="sync-refresh-btn" class="icon-only-btn"><i class="fas fa-sync"></i></button>
+                            <div class="live-status-badge">
+                                <span class="pulse-dot"></span>
+                                Live
+                            </div>
+                        </div>
+                    </div>
+                    <div class="header-sub">
+                        <div class="pills-row">
+                            <button class="pill-btn active" id="mode-val"><i class="fas fa-bolt"></i> Planning</button>
+                            <button class="pill-btn" id="model-val"><i class="far fa-circle"></i> Gemini 3
+                                Flash</button>
+                            <span class="resource-info">537 Nodes · 364KB</span>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="live-streaming-container" id="stream-container">
-                    <img id="stream-img" src="" alt="Live Stream" class="focus-full">
-                    <div class="stream-overlay">LIVE STREAMING</div>
-                    <button id="toggle-expand-btn" class="expand-btn"><i class="fas fa-expand"></i></button>
+                <div id="chat-messages-container" class="agent-chat-container">
+                    <!-- Chat Content from Image 1 will be mirrored here -->
+                    <div class="empty-chat-state">
+                        <i class="fas fa-ghost"></i>
+                        <p>No active session found.</p>
+                    </div>
                 </div>
 
-                <div class="focus-controls">
-                    <button class="focus-btn active" data-focus="full" title="Toàn bộ"><i
-                            class="fas fa-compress-arrows-alt"></i></button>
-                    <button class="focus-btn" data-focus="left" title="Bên trái"><i
-                            class="fas fa-align-left"></i></button>
-                    <button class="focus-btn" data-focus="right" title="Bên phải"><i
-                            class="fas fa-align-right"></i></button>
-                    <button class="focus-btn" data-focus="top" title="Phía trên"><i
-                            class="fas fa-arrow-up"></i></button>
-                    <button class="focus-btn" data-focus="bottom" title="Phía dưới"><i
-                            class="fas fa-arrow-down"></i></button>
-                </div>
-
-                <div class="live-controls">
-                    <div class="command-input-area">
-                        <button id="accept-btn" class="action-btn">ACCEPT</button>
-                        <input type="text" id="cmd-input" placeholder="Nhập lệnh...">
-                        <button id="send-cmd-btn">GỬI</button>
+                <div class="agent-footer">
+                    <div class="quick-action-bar">
+                        <button class="q-action" data-cmd="Continue">Continue</button>
+                        <button class="q-action" data-cmd="Fix Bugs">Fix Bugs</button>
+                        <button class="q-action" data-cmd="Create Docs">Create Docs</button>
+                    </div>
+                    <div class="input-block">
+                        <div class="input-container">
+                            <input type="text" id="chat-agent-input" placeholder="Message...">
+                            <button id="send-agent-btn" class="send-btn-circle"><i
+                                    class="fas fa-paper-plane"></i></button>
+                        </div>
                     </div>
                 </div>
             </div>

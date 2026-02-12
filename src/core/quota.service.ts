@@ -144,23 +144,12 @@ export class QuotaService {
 
                 const freshQuotas = await this.fetchQuotaRealtime(fullAccount);
                 if (freshQuotas && freshQuotas.length > 0) {
-                    const existingQuotas = this.getCachedQuotas(account.id) || [];
+                    // Chuyển sang cơ chế REPLACE hoàn toàn thay vì MERGE để tránh trùng lặp
+                    // do modelId thay đổi giữa các nguồn fetch (Cloud vs Local)
+                    const updatedQuotas = freshQuotas;
 
-                    // Thực hiện UPDATE thay vì xóa đi tạo lại
-                    const updatedQuotas = [...existingQuotas];
-                    freshQuotas.forEach(newQ => {
-                        const index = updatedQuotas.findIndex(q => q.modelId === newQ.modelId);
-                        if (index !== -1) {
-                            // Cập nhật các trường dữ liệu mới
-                            updatedQuotas[index] = { ...updatedQuotas[index], ...newQ };
-                        } else {
-                            // Nếu model mới thì thêm vào
-                            updatedQuotas.push(newQ);
-                        }
-
-                        // Track usage nếu có sự thay đổi (giả định dùng tokens)
-                        this.analyticsService.trackUsage(account.id, 10); // Mock 10 tokens mỗi lần cập nhật
-                    });
+                    // Track usage (giả định dùng tokens) cho tài khoản active
+                    this.analyticsService.trackUsage(account.id, 10);
 
                     this.cache.set(account.id, updatedQuotas);
                     await this.savePersistentQuotas();
@@ -169,7 +158,7 @@ export class QuotaService {
                         this.updateStatusBar(updatedQuotas);
                     }
 
-                    this.logService.addLog(LogLevel.Info, `Updated quotas for ${account.name}`, 'Quota');
+                    this.logService.addLog(LogLevel.Info, `Refreshed ${updatedQuotas.length} quotas for ${account.name}`, 'Quota');
                 }
             } catch (error: any) {
                 this.logService.addLog(LogLevel.Error, `Error refreshing quota for ${account.name}: ${error.message}`, 'Quota');

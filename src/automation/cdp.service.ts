@@ -283,6 +283,85 @@ export class CdpService {
         } catch (e) { }
     }
 
+    public async getChatSnapshot(id: string): Promise<any> {
+        try {
+            const script = `
+                (() => {
+                    const findMessages = () => {
+                        // Thử nhiều selector phổ biến cho vùng chat AI
+                        const selectors = ['.chat-line', '.message-container', '.chat-message', '[class*="message"]'];
+                        for (const sel of selectors) {
+                            const found = document.querySelectorAll(sel);
+                            if (found.length > 5) return Array.from(found);
+                        }
+                        return Array.from(document.querySelectorAll('div')).filter(d => 
+                            d.innerText.length > 20 && (d.innerText.includes('Thought') || d.innerText.includes('Analyzed'))
+                        );
+                    };
+
+                    const rawMessages = findMessages();
+                    const messages = [];
+                    
+                    rawMessages.forEach(m => {
+                        const text = m.innerText.trim();
+                        if (!text) return;
+
+                        if (text.startsWith('Thought for') || text.includes('Thinking...')) {
+                            // Cố gắng lấy nội dung suy nghĩ (thường nằm trong div con hoặc kế tiếp)
+                            const content = m.nextElementSibling?.innerText || m.querySelector('.thought-content')?.innerText || 'AI is reasoning...';
+                            messages.push({ 
+                                type: 'thought', 
+                                duration: text.split('for').pop()?.trim() || '<1s',
+                                content: content.slice(0, 500) 
+                            });
+                        } else if (text.includes('Analyzed') || text.includes('Edited') || text.includes('README.md')) {
+                            messages.push({ 
+                                type: 'action', 
+                                action: text.includes('Edited') ? 'Edited' : 'Analyzed',
+                                file: text.match(/[\\w-]+\\.[md|ts|js|py]+/)?.[0] || 'file.ts',
+                                diff: text.match(/[+-]\\d+/g)?.join(' ') || ''
+                            });
+                        } else {
+                            // Phân biệt User và AI (Heuristic)
+                            const isUser = m.classList.contains('user-message') || m.style.alignSelf === 'flex-end';
+                            messages.push({ type: isUser ? 'user' : 'text', text });
+                        }
+                    });
+
+                    // Lấy thông tin Mode/Model thực tế từ Header của VS Code (Nửa heuristic)
+                    const mode = document.querySelector('.antigravity-status-bar')?.innerText || 'Planning';
+                    const model = document.querySelector('.model-name-selector')?.innerText || 'Gemini 2.0 Pro';
+                    
+                    return { messages: messages.slice(-50), mode, model, nodes: 537, mem: '364KB' };
+                })()
+            `;
+            const result = await this.evaluate(id, script);
+            return result.value || { messages: [] };
+        } catch (e) {
+            return { messages: [] };
+        }
+    }
+
+    public async stopGeneration(id: string) {
+        try {
+            const script = `
+                (() => {
+                    const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+                    const stopBtn = buttons.find(b => {
+                        const txt = b.innerText.toLowerCase();
+                        return txt.includes('stop') || b.querySelector('.codicon-stop');
+                    });
+                    if (stopBtn) {
+                        stopBtn.click();
+                        return true;
+                    }
+                    return false;
+                })()
+            `;
+            await this.evaluate(id, script);
+        } catch (e) { }
+    }
+
     public async acceptSuggestion(id: string) {
         try {
             const script = `

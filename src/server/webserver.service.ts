@@ -147,6 +147,42 @@ export class WebServerService {
             res.json({ success: true });
         });
 
+        // Chat Agent API (New for Image 1 Style)
+        api.get('/chat/status', async (req, res) => {
+            const connections = this.cdpService.getConnectionInfo();
+            const active = connections.find(c => c.connected);
+            if (!active) {
+                return res.json({ messages: [], mode: 'Planning', model: 'Gemini 3 Flash' });
+            }
+            const snapshot = await this.cdpService.getChatSnapshot(active.id);
+            res.json(snapshot);
+        });
+
+        api.post('/chat/send', async (req, res) => {
+            const { text } = req.body;
+            const connections = this.cdpService.getConnectionInfo();
+            const active = connections.find(c => c.connected);
+            if (active && text) {
+                await this.cdpService.insertAndSubmit(active.id, text);
+                res.json({ success: true });
+            } else {
+                res.status(400).json({ error: 'No active connection or missing text' });
+            }
+        });
+
+        api.post('/chat/stop', async (req, res) => {
+            const connections = this.cdpService.getConnectionInfo();
+            const active = connections.find(c => c.connected);
+            if (active) {
+                await this.cdpService.stopGeneration(active.id);
+                // Also trigger VS Code command for fallback
+                try { await vscode.commands.executeCommand('antigravity.step.stop'); } catch (e) { }
+                res.json({ success: true });
+            } else {
+                res.status(400).json({ error: 'No active connection' });
+            }
+        });
+
         this.app.use('/api', api);
     }
 
@@ -162,10 +198,26 @@ export class WebServerService {
                     if (val === 'Copy PIN') vscode.env.clipboard.writeText(this.pin);
                 });
 
-                try {
-                    const res = await axios.get('https://loca.lt/mytunnelpassword');
-                    this.tunnelPassword = res.data.trim();
-                } catch (e) { }
+                // Lấy IP công cộng (Tunnel Password) từ nhiều nguồn ổn định
+                const providers = [
+                    'https://api.ipify.org',
+                    'https://ifconfig.me/ip',
+                    'https://loca.lt/mytunnelpassword'
+                ];
+                for (const url of providers) {
+                    try {
+                        const res = await axios.get(url, { timeout: 3000 });
+                        const ip = res.data.toString().trim();
+                        // Validate IP IPv4 format
+                        if (/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(ip)) {
+                            this.tunnelPassword = ip;
+                            this.logService.addLog(LogLevel.Info, `Public IP identified: ${ip} (from ${new URL(url).hostname})`, 'WebServer');
+                            break;
+                        }
+                    } catch (e) {
+                        continue;
+                    }
+                }
 
                 try {
                     this.tunnel = await localtunnel({ port: this.PORT });
