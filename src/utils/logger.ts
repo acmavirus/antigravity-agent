@@ -15,7 +15,7 @@ export interface LogEntry {
     source: string;
 }
 
-export class LogService {
+export class Logger {
     private logs: LogEntry[] = [];
     private readonly MAX_LOGS = 500;
     private readonly STORAGE_KEY = 'antigravity.logs';
@@ -42,7 +42,7 @@ export class LogService {
         this._onDidChangeLogs.fire();
     }
 
-    public async addLog(level: LogLevel, message: string, source: string = 'System') {
+    public async log(level: LogLevel, message: string, source: string = 'System') {
         const entry: LogEntry = {
             timestamp: Date.now(),
             level,
@@ -50,14 +50,30 @@ export class LogService {
             source
         };
 
-        this.logs.unshift(entry); // Thêm vào đầu danh sách
+        this.logs.unshift(entry); // Add to the beginning
 
-        // Giới hạn số lượng log
+        // Limit logs
         if (this.logs.length > this.MAX_LOGS) {
             this.logs = this.logs.slice(0, this.MAX_LOGS);
         }
 
         await this.saveLogs();
+    }
+
+    public async info(message: string, source?: string) {
+        await this.log(LogLevel.Info, message, source);
+    }
+
+    public async success(message: string, source?: string) {
+        await this.log(LogLevel.Success, message, source);
+    }
+
+    public async warn(message: string, source?: string) {
+        await this.log(LogLevel.Warning, message, source);
+    }
+
+    public async error(message: string, source?: string) {
+        await this.log(LogLevel.Error, message, source);
     }
 
     public getLogs(): LogEntry[] {

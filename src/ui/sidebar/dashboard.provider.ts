@@ -1,16 +1,16 @@
 import * as vscode from 'vscode';
-import { QuotaService } from '../core/quota.service';
-import { AccountService } from '../core/account.service';
-import { LogService } from '../core/log.service';
-import { AnalyticsService } from '../core/analytics.service';
-import { CdpService } from '../automation/cdp.service';
+import { QuotaService } from '../../services/quota.service';
+import { AccountService } from '../../services/account.service';
+import { Logger } from '../../utils/logger';
+import { AnalyticsService } from '../../services/analytics.service';
+import { CdpService } from '../../automation/cdp/cdp.service';
 
 export class DashboardProvider implements vscode.WebviewViewProvider {
     constructor(
         private readonly extensionUri: vscode.Uri,
         private readonly quotaService: QuotaService,
         private readonly accountService: AccountService,
-        private readonly logService: LogService,
+        private readonly logService: Logger,
         private readonly analyticsService: AnalyticsService,
         private readonly cdpService: CdpService
     ) { }

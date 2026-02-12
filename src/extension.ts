@@ -1,22 +1,22 @@
 // Copyright by AcmaTvirus
 import * as vscode from 'vscode';
-import { AccountService } from './core/account.service';
-import { QuotaService } from './core/quota.service';
-import { SchedulerService } from './core/scheduler.service';
-import { DashboardProvider } from './views/dashboard.provider';
+import { AccountService } from './services/account.service';
+import { QuotaService } from './services/quota.service';
+import { SchedulerService } from './services/scheduler.service';
+import { DashboardProvider } from './ui/sidebar/dashboard.provider';
 
-import { LogService, LogLevel } from './core/log.service';
-import { NotificationService } from './core/notification.service';
-import { AnalyticsService } from './core/analytics.service';
-import { CdpService } from './automation/cdp.service';
-import { WebServerService } from './server/webserver.service';
+import { Logger, LogLevel } from './utils/logger';
+import { NotificationService } from './services/notification.service';
+import { AnalyticsService } from './services/analytics.service';
+import { CdpService } from './automation/cdp/cdp.service';
+import { WebServerService } from './services/server/webserver.service';
 
 export function activate(context: vscode.ExtensionContext) {
     try {
         console.log('Antigravity Agent is activating...');
 
         // Initialize Base Services
-        const logService = new LogService(context);
+        const logService = new Logger(context);
         const notificationService = new NotificationService(context);
         const analyticsService = new AnalyticsService(context);
         const accountService = new AccountService(context);

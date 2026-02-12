@@ -1,10 +1,10 @@
-/* Copyright by AcmaTvirus */
+// Copyright by AcmaTvirus
 import * as vscode from 'vscode';
 import * as cron from 'node-cron';
-import { QuotaService, ModelQuota } from './quota.service';
+import { QuotaService } from './quota.service';
 import { AccountService } from './account.service';
-
-import { LogService, LogLevel } from './log.service';
+import { Logger, LogLevel } from '../utils/logger';
+import { ModelQuota } from '../interfaces/quota.interface';
 
 export class SchedulerService {
     private processedResets: Set<string> = new Set();
@@ -14,7 +14,7 @@ export class SchedulerService {
         private context: vscode.ExtensionContext,
         private quotaService: QuotaService,
         private accountService: AccountService,
-        private logService: LogService
+        private logService: Logger
     ) { }
 
     public start() {
@@ -83,7 +83,7 @@ export class SchedulerService {
                         this.processedResets.add(resetKey);
                         wakeUpCount++;
 
-                        this.logService.addLog(LogLevel.Success, `Auto-activation successful: ${model.displayName} (${model.resetTime})`, 'Scheduler');
+                        this.logService.success(`Auto-activation successful: ${model.displayName} (${model.resetTime})`, 'Scheduler');
                         break;
                     }
                 }

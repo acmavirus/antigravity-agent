@@ -2,7 +2,7 @@
     "name": "antigravity-agent",
     "displayName": "Antigravity Agent",
     "description": "Manage Accounts, Monitor Quotas & Automate AI Intelligence Activation.",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "publisher": "AcmaTvirus",
     "repository": {
         "type": "git",
@@ -131,6 +131,7 @@
         "@typescript-eslint/eslint-plugin": "^5.59.1",
         "@typescript-eslint/parser": "^5.59.1",
         "eslint": "^8.39.0",
+        "sqlite3": "^5.1.7",
         "typescript": "^5.0.4"
     },
     "dependencies": {

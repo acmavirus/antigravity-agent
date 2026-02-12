@@ -5,44 +5,8 @@ import { exec } from 'child_process';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
-import { ProtobufDecoder } from './protobuf.decoder';
-
-export enum AccountStatus {
-    Active = 'active',
-    Expired = 'expired',
-    Forbidden = 'forbidden',
-    Unknown = 'unknown'
-}
-
-export interface ProxyConfig {
-    enabled: boolean;
-    host: string;
-    port: number;
-    username?: string;
-    password?: string;
-}
-
-export interface UsageStats {
-    totalRequests: number;
-    totalTokens: number;
-    history: { timestamp: number; requests: number; tokens: number }[];
-}
-
-export interface Account {
-    id: string;
-    name: string;
-    type: 'google' | 'json' | 'key' | 'client';
-    status: AccountStatus;
-    lastChecked: number;
-    proxy?: ProxyConfig;
-    stats?: UsageStats;
-    automationSettings?: {
-        autoSwitchThreshold: number;
-        excludeCommands?: string[];
-    };
-    // Dữ liệu thực thi sẽ được load từ SecretStorage bằng ID
-    data?: any;
-}
+import { ProtobufDecoder } from '../api/protobuf/decoder';
+import { Account, AccountStatus } from '../interfaces/account.interface';
 
 export class AccountService {
     private accounts: Account[] = [];
@@ -59,7 +23,6 @@ export class AccountService {
         if (data) {
             try {
                 this.accounts = JSON.parse(data);
-                // Load dữ liệu từ secrets một cách lười (on-demand) hoặc ngay lập tức nếu cần
             } catch (e) {
                 this.accounts = [];
             }
@@ -157,47 +120,80 @@ export class AccountService {
         try {
             if (process.platform === 'win32') {
                 const dbPath = path.join(os.homedir(), 'AppData', 'Roaming', 'Antigravity', 'User', 'globalStorage', 'state.vscdb');
-                const query = "SELECT hex(value) FROM ItemTable WHERE key = 'jetskiStateSync.agentManagerInitState'";
-                const command = `sqlite3 "${dbPath}" "${query}"`;
 
-                const resultHex = await new Promise<string>((resolve) => {
-                    exec(command, (error, stdout) => {
-                        if (error) resolve('ERROR');
-                        else resolve(stdout.trim());
+                // Helper to run sqlite query
+                const runQuery = (query: string): Promise<string> => {
+                    return new Promise<string>((resolve) => {
+                        const command = `sqlite3 "${dbPath}" "${query}"`;
+                        exec(command, (error, stdout) => {
+                            if (error) resolve('ERROR');
+                            else resolve(stdout.trim());
+                        });
                     });
-                });
+                };
 
-                if (resultHex && resultHex !== 'ERROR' && resultHex !== '') {
-                    // Xóa tất cả khoảng trắng/xuống dòng do sqlite3 có thể format output
-                    const cleanHex = resultHex.replace(/\s+/g, '');
-                    const buffer = Buffer.from(cleanHex, 'hex');
-                    const session = ProtobufDecoder.decode(buffer);
-                    const email = session?.context?.email;
+                const keysToCheck = [
+                    'jetskiStateSync.agentManagerInitState',
+                    'antigravityUnifiedStateSync.oauthToken'
+                ];
 
-                    if (email) {
-                        const base64Data = buffer.toString('base64');
-                        const existingIndex = this.accounts.findIndex(a => a.name === email);
+                for (const key of keysToCheck) {
+                    const query = `SELECT hex(value) FROM ItemTable WHERE key = '${key}'`;
+                    const resultHex = await runQuery(query);
 
-                        if (existingIndex !== -1) {
-                            const existingId = this.accounts[existingIndex].id;
-                            this.accounts[existingIndex].lastChecked = Date.now();
-                            await this.saveSecret(existingId, { raw: base64Data });
-                            await this.saveAccounts();
-                            vscode.window.showInformationMessage(`Session synced: ${email}`);
-                            return true;
+                    if (resultHex && resultHex !== 'ERROR' && resultHex !== '') {
+                        const cleanHex = resultHex.replace(/\s+/g, '');
+                        let buffer: Buffer;
+                        let rawData: string;
+
+                        // Xử lý tùy theo key
+                        if (key === 'antigravityUnifiedStateSync.oauthToken') {
+                            const hexBuffer = Buffer.from(cleanHex, 'hex');
+                            // Thử decode dưới dạng UTF-8 string (để lấy base64)
+                            // Nếu hex string này thực ra là hex của base64 string
+                            const potentialBase64 = hexBuffer.toString('utf8');
+
+                            // Kiểm tra sơ bộ xem có phải base64 string hợp lệ không
+                            // (Chứa ký tự alnum, +, /, =)
+                            if (/^[A-Za-z0-9+/=]+$/.test(potentialBase64)) {
+                                buffer = Buffer.from(potentialBase64, 'base64');
+                                rawData = potentialBase64;
+                            } else {
+                                // Nếu không, fallback về coi như raw binary (blob)
+                                buffer = Buffer.from(cleanHex, 'hex');
+                                rawData = buffer.toString('base64');
+                            }
                         } else {
-                            const id = `antigravity-${Date.now()}`;
-                            this.accounts.push({
-                                id,
-                                name: email,
-                                type: 'client',
-                                status: AccountStatus.Active,
-                                lastChecked: Date.now()
-                            });
-                            await this.saveSecret(id, { raw: base64Data });
-                            await this.saveAccounts();
-                            vscode.window.showInformationMessage(`Account automatically imported: ${email}`);
-                            return true;
+                            buffer = Buffer.from(cleanHex, 'hex');
+                            rawData = buffer.toString('base64');
+                        }
+
+                        const session = ProtobufDecoder.decode(buffer);
+                        const email = session?.context?.email;
+
+                        if (email) {
+                            const existingIndex = this.accounts.findIndex(a => a.name === email);
+                            if (existingIndex !== -1) {
+                                const existingId = this.accounts[existingIndex].id;
+                                this.accounts[existingIndex].lastChecked = Date.now();
+                                await this.saveSecret(existingId, { raw: rawData });
+                                await this.saveAccounts();
+                                vscode.window.showInformationMessage(`Session synced: ${email}`);
+                                return true;
+                            } else {
+                                const id = `antigravity-${Date.now()}`;
+                                this.accounts.push({
+                                    id,
+                                    name: email,
+                                    type: 'client',
+                                    status: AccountStatus.Active,
+                                    lastChecked: Date.now()
+                                });
+                                await this.saveSecret(id, { raw: rawData });
+                                await this.saveAccounts();
+                                vscode.window.showInformationMessage(`Account automatically imported: ${email}`);
+                                return true;
+                            }
                         }
                     }
                 }
@@ -245,24 +241,48 @@ export class AccountService {
         const dbPath = path.join(os.homedir(), 'AppData', 'Roaming', 'Antigravity', 'User', 'globalStorage', 'state.vscdb');
         if (!fs.existsSync(dbPath)) return null;
 
-        const query = "SELECT hex(value) FROM ItemTable WHERE key = 'jetskiStateSync.agentManagerInitState'";
-        const command = `sqlite3 "${dbPath}" "${query}"`;
-
         try {
-            const resultHex = await new Promise<string>((resolve) => {
-                const child = exec(command, { timeout: 2000 }, (error, stdout) => {
-                    if (error) resolve('');
-                    else resolve(stdout.trim());
+            const runQuery = (query: string): Promise<string> => {
+                return new Promise<string>((resolve) => {
+                    exec(`sqlite3 "${dbPath}" "${query}"`, { timeout: 2000 }, (error, stdout) => {
+                        if (error) resolve('');
+                        else resolve(stdout.trim());
+                    });
                 });
-            });
+            };
+
+            const keysToCheck = [
+                'jetskiStateSync.agentManagerInitState',
+                'antigravityUnifiedStateSync.oauthToken'
+            ];
 
             let email: string | null = null;
-            if (resultHex) {
-                // Xóa tất cả khoảng trắng/xuống dòng do sqlite3 có thể format output
-                const cleanHex = resultHex.replace(/\s+/g, '');
-                const buffer = Buffer.from(cleanHex, 'hex');
-                const session = ProtobufDecoder.decode(buffer);
-                email = session?.context?.email || null;
+
+            for (const key of keysToCheck) {
+                const resultHex = await runQuery(`SELECT hex(value) FROM ItemTable WHERE key = '${key}'`);
+
+                if (resultHex) {
+                    const cleanHex = resultHex.replace(/\s+/g, '');
+                    let buffer: Buffer;
+
+                    if (key === 'antigravityUnifiedStateSync.oauthToken') {
+                        const hexBuffer = Buffer.from(cleanHex, 'hex');
+                        const base64String = hexBuffer.toString('utf8');
+                        if (/^[A-Za-z0-9+/=]+$/.test(base64String)) {
+                            buffer = Buffer.from(base64String, 'base64');
+                        } else {
+                            buffer = Buffer.from(cleanHex, 'hex');
+                        }
+                    } else {
+                        buffer = Buffer.from(cleanHex, 'hex');
+                    }
+
+                    const session = ProtobufDecoder.decode(buffer);
+                    if (session?.context?.email) {
+                        email = session.context.email;
+                        break;
+                    }
+                }
             }
 
             this.cachedActiveEmail = { email, timestamp: now };
@@ -275,10 +295,7 @@ export class AccountService {
     public async switchAccount(id: string) {
         const release = await this.mutex.acquire();
         console.log(`[AccountService] Initiating switch to account ID: ${id}`);
-
-        // Xóa cache ngay lập tức khi thực hiện switch
         this.cachedActiveEmail = null;
-
         const tempSqlPath = path.join(os.tmpdir(), `antigravity_switch_${Date.now()}.sql`);
 
         try {
@@ -296,15 +313,12 @@ export class AccountService {
                 return;
             }
 
-            // Chuyển Base64 sang Hex để ghi BLOB an toàn
             const buffer = Buffer.from(secretData.raw, 'base64');
             const hexValue = buffer.toString('hex');
 
-            // Ghi câu lệnh vào file tạm để tránh lỗi ENAMETOOLONG trên Windows
             const sqlQuery = `UPDATE ItemTable SET value = X'${hexValue}' WHERE key = 'jetskiStateSync.agentManagerInitState';`;
             fs.writeFileSync(tempSqlPath, sqlQuery, 'utf8');
 
-            // Lệnh thực thi sử dụng input redirection từ file
             const command = `sqlite3 "${dbPath}" < "${tempSqlPath}"`;
 
             let success = false;
@@ -320,7 +334,6 @@ export class AccountService {
                         });
                     });
 
-                    // Verify lại
                     const verifyQuery = `SELECT hex(value) FROM ItemTable WHERE key = 'jetskiStateSync.agentManagerInitState';`;
                     const verifyCommand = `sqlite3 "${dbPath}" "${verifyQuery}"`;
                     const currentHex = await new Promise<string>((resolve) => {

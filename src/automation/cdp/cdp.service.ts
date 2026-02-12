@@ -1,5 +1,7 @@
 // Copyright by AcmaTvirus
 import * as vscode from 'vscode';
+import * as http from 'http';
+import WebSocket from 'ws';
 
 const PORTS_TO_SCAN = [
     9000, 9001, 9002, 9003, 9004, 9005, // AI IDEs (Cursor/Antigravity)
@@ -16,7 +18,7 @@ interface CdpPage {
 }
 
 interface CdpConnection {
-    ws: any;
+    ws: WebSocket;
     url: string;
 }
 
@@ -26,10 +28,14 @@ export class CdpService {
     private isEnabled: boolean = false;
     private pollTimer: NodeJS.Timeout | null = null;
 
-    constructor(private context: vscode.ExtensionContext) { }
+    constructor(private context: vscode.ExtensionContext) {
+        // Constructor intentional empty
+    }
 
     public async start() {
-        if (this.isEnabled) return;
+        if (this.isEnabled) {
+            return;
+        }
         this.isEnabled = true;
         console.log('[CDP] Starting Intelligent Engine...');
 
@@ -37,7 +43,9 @@ export class CdpService {
 
         // Scan every 45 seconds - Very low overhead
         this.pollTimer = setInterval(async () => {
-            if (!this.isEnabled) return;
+            if (!this.isEnabled) {
+                return;
+            }
             await this.scanAndConnect();
         }, 45000);
     }
@@ -49,10 +57,12 @@ export class CdpService {
             this.pollTimer = null;
         }
 
-        for (const [id, conn] of this.connections) {
+        for (const [id, conn] of this.connections) { // eslint-disable-line @typescript-eslint/no-unused-vars
             try {
                 conn.ws.close();
-            } catch (e) { }
+            } catch (e) {
+                // Ignore close errors
+            }
         }
         this.connections.clear();
     }
@@ -62,31 +72,32 @@ export class CdpService {
             try {
                 const pages = await this.getPages(port);
                 for (const page of pages) {
-                    if (!page.webSocketDebuggerUrl) continue;
+                    if (!page.webSocketDebuggerUrl) {
+                        continue;
+                    }
 
                     const id = `${port}:${page.id}`;
                     if (!this.connections.has(id)) {
                         await this.connect(id, page.webSocketDebuggerUrl);
                     }
-
-
                 }
-            } catch (e) { }
+            } catch (e) {
+                // Ignore connection errors during scan
+            }
         }
     }
 
     private async getPages(port: number): Promise<CdpPage[]> {
         return new Promise((resolve) => {
             try {
-                const http = require('http');
                 const req = http.get({
                     hostname: '127.0.0.1',
                     port: port,
                     path: '/json/list',
                     timeout: 400 // Fast timeout
-                }, (res: any) => {
+                }, (res) => {
                     let data = '';
-                    res.on('data', (chunk: any) => data += chunk);
+                    res.on('data', (chunk) => data += chunk);
                     res.on('end', () => {
                         try {
                             const pages = JSON.parse(data) as CdpPage[];
@@ -111,12 +122,11 @@ export class CdpService {
     private connect(id: string, url: string): Promise<boolean> {
         return new Promise((resolve) => {
             try {
-                const WebSocket = require('ws');
                 const ws = new WebSocket(url);
 
                 const timeout = setTimeout(() => {
                     if (ws.readyState === WebSocket.CONNECTING) {
-                        try { ws.terminate(); } catch (e) { }
+                        try { ws.terminate(); } catch (e) { /* ignore */ }
                         resolve(false);
                     }
                 }, 2000);
@@ -142,11 +152,11 @@ export class CdpService {
         });
     }
 
-
-
-    public evaluate(id: string, expression: string): Promise<any> {
+    public evaluate(id: string, expression: string): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
         const conn = this.connections.get(id);
-        if (!conn || conn.ws.readyState !== 1) return Promise.reject('WS unavailable');
+        if (!conn || conn.ws.readyState !== WebSocket.OPEN) {
+            return Promise.reject('WS unavailable');
+        }
 
         return new Promise((resolve, reject) => {
             const msgId = this.msgId++;
@@ -166,7 +176,7 @@ export class CdpService {
                 reject(new Error('Timeout'));
             }, 6000);
 
-            const onMessage = (data: any) => {
+            const onMessage = (data: WebSocket.RawData) => {
                 try {
                     const response = JSON.parse(data.toString());
                     if (response.id === msgId) {
@@ -174,7 +184,9 @@ export class CdpService {
                         conn.ws.off('message', onMessage);
                         resolve(response.result);
                     }
-                } catch (e) { }
+                } catch (e) {
+                    // Ignore parse errors
+                }
             };
 
             conn.ws.on('message', onMessage);
@@ -185,7 +197,9 @@ export class CdpService {
     public async isDebuggingEnabled(): Promise<boolean> {
         for (const port of PORTS_TO_SCAN) {
             const pages = await this.getPages(port);
-            if (pages.length > 0) return true;
+            if (pages.length > 0) {
+                return true;
+            }
         }
         return false;
     }
@@ -206,13 +220,17 @@ export class CdpService {
                 windowsVirtualKeyCode: key === 'Enter' ? 13 : undefined,
                 modifiers: modifiers
             });
-        } catch (e) { }
+        } catch (e) {
+            // Ignore dispatch errors
+        }
     }
 
     public async insertText(id: string, text: string) {
         try {
             await this.sendCommand(id, 'Input.insertText', { text });
-        } catch (e) { }
+        } catch (e) {
+            // Ignore insert errors
+        }
     }
 
     public async captureScreenshot(id: string): Promise<string | null> {
@@ -225,7 +243,7 @@ export class CdpService {
         } catch (e) { return null; }
     }
 
-    public async scrapeChat(id: string): Promise<any> {
+    public async scrapeChat(id: string): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
         try {
             // Script để lấy chat từ DOM của Cursor/Antigravity
             const script = `
@@ -251,10 +269,12 @@ export class CdpService {
             await this.insertText(id, text);
             await new Promise(r => setTimeout(r, 100));
             await this.dispatchKey(id, 'Enter', 'Enter');
-        } catch (e) { }
+        } catch (e) {
+            // Ignore errors
+        }
     }
 
-    public async getChatSnapshot(id: string): Promise<any> {
+    public async getChatSnapshot(id: string): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
         try {
             const script = `
                 (() => {
@@ -330,7 +350,9 @@ export class CdpService {
                 })()
             `;
             await this.evaluate(id, script);
-        } catch (e) { }
+        } catch (e) {
+            // Ignore errors
+        }
     }
 
     public async acceptSuggestion(id: string) {
@@ -350,25 +372,31 @@ export class CdpService {
                 })()
             `;
             await this.evaluate(id, script);
-        } catch (e) { }
+        } catch (e) {
+            // Ignore errors
+        }
     }
 
-    private async sendCommand(id: string, method: string, params: any): Promise<any> {
+    private async sendCommand(id: string, method: string, params: any): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
         const conn = this.connections.get(id);
-        if (!conn || conn.ws.readyState !== 1) return Promise.reject('WS unavailable');
+        if (!conn || conn.ws.readyState !== WebSocket.OPEN) {
+            return Promise.reject('WS unavailable');
+        }
 
         return new Promise((resolve, reject) => {
             const msgId = this.msgId++;
             const payload = { id: msgId, method, params };
 
-            const onMessage = (data: any) => {
+            const onMessage = (data: WebSocket.RawData) => {
                 try {
                     const response = JSON.parse(data.toString());
                     if (response.id === msgId) {
                         conn.ws.off('message', onMessage);
                         resolve(response.result);
                     }
-                } catch (e) { }
+                } catch (e) {
+                    // Ignore parse errors
+                }
             };
 
             conn.ws.on('message', onMessage);
@@ -386,7 +414,7 @@ export class CdpService {
             info.push({
                 id,
                 url: conn.url,
-                connected: conn.ws?.readyState === 1
+                connected: conn.ws?.readyState === WebSocket.OPEN
             });
         }
         return info;

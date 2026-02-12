@@ -2,43 +2,28 @@
 import * as vscode from 'vscode';
 import express from 'express';
 import * as path from 'path';
-import { Server } from 'http';
-import localtunnel from 'localtunnel';
-import axios from 'axios';
-import { AccountService } from '../core/account.service';
-import { QuotaService } from '../core/quota.service';
-import { LogService, LogLevel } from '../core/log.service';
-import { AnalyticsService } from '../core/analytics.service';
-import { CdpService } from '../automation/cdp.service';
+import { AccountService } from '../account.service';
+import { QuotaService } from '../quota.service';
+import { Logger } from '../../utils/logger';
+import { AnalyticsService } from '../analytics.service';
+import { CdpService } from '../../automation/cdp/cdp.service';
 
-/**
- * Service quản lý Web Server để truy cập Dashboard từ điện thoại.
- */
-export class WebServerService {
-    private app: express.Application;
-    private server: Server | null = null;
-    private tunnel: localtunnel.Tunnel | null = null;
-    private publicUrl: string | null = null;
-    private tunnelPassword: string | null = null;
-    private pin: string = '';
-    private readonly PORT = 3001;
-
+export class ExpressApp {
+    public app: express.Application;
+    
     constructor(
         private context: vscode.ExtensionContext,
         private accountService: AccountService,
         private quotaService: QuotaService,
-        private logService: LogService,
+        private logService: Logger,
         private analyticsService: AnalyticsService,
-        private cdpService: CdpService
+        private cdpService: CdpService,
+        private pin: string,
+        private tunnelManager: any // Type any to avoid circular dependency or import issues for now
     ) {
         this.app = express();
         this.app.use(express.json());
-        this.generatePin();
         this.setupRoutes();
-    }
-
-    private generatePin() {
-        this.pin = Math.floor(100000 + Math.random() * 900000).toString();
     }
 
     private authMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -94,8 +79,8 @@ export class WebServerService {
             res.json({
                 accounts,
                 monitor: monitorInfo,
-                publicUrl: this.publicUrl,
-                tunnelPassword: this.tunnelPassword,
+                publicUrl: this.tunnelManager.publicUrl,
+                tunnelPassword: this.tunnelManager.tunnelPassword,
                 logs: this.logService.getLogs().slice(-20),
                 analytics: this.analyticsService.getUsageHistory(),
                 timestamp: new Date().toISOString()
@@ -129,7 +114,9 @@ export class WebServerService {
                 await this.cdpService.acceptSuggestion(id);
                 const commands = ['antigravity.step.accept', 'antigravity.step.run', 'antigravity.accept'];
                 for (const cmd of commands) {
-                    try { await vscode.commands.executeCommand(cmd); } catch (e) { }
+                    try { await vscode.commands.executeCommand(cmd); } catch (e) {
+                        // Ignore command execution errors
+                    }
                 }
                 res.json({ success: true });
             } else {
@@ -176,7 +163,9 @@ export class WebServerService {
             if (active) {
                 await this.cdpService.stopGeneration(active.id);
                 // Also trigger VS Code command for fallback
-                try { await vscode.commands.executeCommand('antigravity.step.stop'); } catch (e) { }
+                try { await vscode.commands.executeCommand('antigravity.step.stop'); } catch (e) {
+                    // Ignore stop command error
+                }
                 res.json({ success: true });
             } else {
                 res.status(400).json({ error: 'No active connection' });
@@ -184,56 +173,5 @@ export class WebServerService {
         });
 
         this.app.use('/api', api);
-    }
-
-    public async start() {
-        if (this.server) return;
-        try {
-            this.server = this.app.listen(this.PORT, '0.0.0.0', async () => {
-                const localUrl = `http://localhost:${this.PORT}`;
-                console.log(`[WebServer] Mobile Dashboard running at ${localUrl} | PIN: ${this.pin}`);
-                this.logService.addLog(LogLevel.Info, `Mobile Dashboard started | PIN: ${this.pin}`, 'WebServer');
-
-                vscode.window.showInformationMessage(`🚀 Antigravity Mobile Server ON | PIN: ${this.pin}`, 'Copy PIN').then(val => {
-                    if (val === 'Copy PIN') vscode.env.clipboard.writeText(this.pin);
-                });
-
-                // Lấy IP công cộng (Tunnel Password) từ nhiều nguồn ổn định
-                const providers = [
-                    'https://api.ipify.org',
-                    'https://ifconfig.me/ip',
-                    'https://loca.lt/mytunnelpassword'
-                ];
-                for (const url of providers) {
-                    try {
-                        const res = await axios.get(url, { timeout: 3000 });
-                        const ip = res.data.toString().trim();
-                        // Validate IP IPv4 format
-                        if (/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(ip)) {
-                            this.tunnelPassword = ip;
-                            this.logService.addLog(LogLevel.Info, `Public IP identified: ${ip} (from ${new URL(url).hostname})`, 'WebServer');
-                            break;
-                        }
-                    } catch (e) {
-                        continue;
-                    }
-                }
-
-                try {
-                    this.tunnel = await localtunnel({ port: this.PORT });
-                    this.publicUrl = this.tunnel.url;
-                    this.logService.addLog(LogLevel.Success, `URL: ${this.publicUrl} | PIN: ${this.pin}`, 'WebServer');
-                } catch (e: any) {
-                    this.logService.addLog(LogLevel.Error, `Tunnel Error: ${e.message}`, 'WebServer');
-                }
-            });
-        } catch (error: any) {
-            console.error(`[WebServer] Failed to start: ${error.message}`);
-        }
-    }
-
-    public stop() {
-        if (this.tunnel) { this.tunnel.close(); this.tunnel = null; }
-        if (this.server) { this.server.close(); this.server = null; }
     }
 }

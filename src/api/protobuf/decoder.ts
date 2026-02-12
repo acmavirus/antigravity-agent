@@ -11,6 +11,12 @@ export class ProtobufDecoder {
         if (!this.root) {
             this.root = protobuf.Root.fromJSON({
                 nested: {
+                    TokenInfo: {
+                        fields: {
+                            key: { id: 1, type: "string" },
+                            payload: { id: 2, type: "bytes" }
+                        }
+                    },
                     google: {
                         nested: {
                             internal: {
@@ -57,13 +63,40 @@ export class ProtobufDecoder {
             }
 
             const SessionResponse = this.getRoot().lookupType("google.internal.antigravity.SessionResponse");
-            const message = SessionResponse.decode(buffer);
-            return SessionResponse.toObject(message, {
-                defaults: true,
-                enums: String,
-                longs: String,
-                bytes: String,
-            });
+            try {
+                const message = SessionResponse.decode(buffer);
+                const obj = SessionResponse.toObject(message, {
+                    defaults: true,
+                    enums: String,
+                    longs: String,
+                    bytes: String,
+                });
+                if (obj.context?.email) return obj;
+            } catch (e) {
+                // Ignore, try other format
+            }
+
+            // Try decoding as TokenInfo wrapper
+            const TokenInfo = this.getRoot().lookupType("TokenInfo");
+            try {
+                const tokenMsg = TokenInfo.decode(buffer);
+                const tokenObj = TokenInfo.toObject(tokenMsg);
+
+                if (tokenObj.payload && tokenObj.payload.length > 0) {
+                    const payloadBuffer = tokenObj.payload; // Already Buffer/Uint8Array
+                    const innerMsg = SessionResponse.decode(payloadBuffer);
+                    return SessionResponse.toObject(innerMsg, {
+                        defaults: true,
+                        enums: String,
+                        longs: String,
+                        bytes: String,
+                    });
+                }
+            } catch (e) {
+                // Ignore
+            }
+
+            return null;
         } catch (e: any) {
             console.error('[ProtobufDecoder] Decoding error:', e.message);
             if (input instanceof Buffer) {
