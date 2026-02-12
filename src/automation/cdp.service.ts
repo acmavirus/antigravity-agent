@@ -1,7 +1,5 @@
 // Copyright by AcmaTvirus
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
 
 const PORTS_TO_SCAN = [
     9000, 9001, 9002, 9003, 9004, 9005, // AI IDEs (Cursor/Antigravity)
@@ -20,8 +18,6 @@ interface CdpPage {
 interface CdpConnection {
     ws: any;
     url: string;
-    injected: boolean;
-    lastConfigHash?: string;
 }
 
 export class CdpService {
@@ -55,7 +51,6 @@ export class CdpService {
 
         for (const [id, conn] of this.connections) {
             try {
-                await this.evaluate(id, 'if(window.__autoAcceptStop) window.__autoAcceptStop()');
                 conn.ws.close();
             } catch (e) { }
         }
@@ -74,7 +69,7 @@ export class CdpService {
                         await this.connect(id, page.webSocketDebuggerUrl);
                     }
 
-                    await this.injectScript(id);
+
                 }
             } catch (e) { }
         }
@@ -128,7 +123,7 @@ export class CdpService {
 
                 ws.on('open', () => {
                     clearTimeout(timeout);
-                    this.connections.set(id, { ws, url, injected: false });
+                    this.connections.set(id, { ws, url });
                     console.log(`[CDP] Connected to ${id}`);
                     resolve(true);
                 });
@@ -147,39 +142,7 @@ export class CdpService {
         });
     }
 
-    private cachedScript: string | null = null;
 
-    private async injectScript(id: string) {
-        const conn = this.connections.get(id);
-        if (!conn) return;
-
-        try {
-            if (!conn.injected) {
-                if (!this.cachedScript) {
-                    const scriptPath = this.context.asAbsolutePath(path.join('resources', 'cdp-inject.js'));
-                    if (fs.existsSync(scriptPath)) {
-                        this.cachedScript = fs.readFileSync(scriptPath, 'utf8');
-                    }
-                }
-
-                if (this.cachedScript) {
-                    await this.evaluate(id, this.cachedScript);
-                    conn.injected = true;
-                }
-            }
-
-            const config = { mode: 'passive' };
-            const configStr = JSON.stringify(config);
-
-            if (conn.lastConfigHash !== configStr) {
-                await this.evaluate(id, `if(window.__autoAcceptStart) window.__autoAcceptStart(${configStr})`);
-                conn.lastConfigHash = configStr;
-            }
-
-        } catch (e) {
-            conn.injected = false;
-        }
-    }
 
     public evaluate(id: string, expression: string): Promise<any> {
         const conn = this.connections.get(id);
@@ -423,7 +386,6 @@ export class CdpService {
             info.push({
                 id,
                 url: conn.url,
-                injected: conn.injected,
                 connected: conn.ws?.readyState === 1
             });
         }

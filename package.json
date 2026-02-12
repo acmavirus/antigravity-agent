@@ -50,11 +50,6 @@
                 "icon": "$(add)"
             },
             {
-                "command": "antigravity.toggleAutoAccept",
-                "title": "Antigravity: Toggle Auto-Accept",
-                "icon": "$(check)"
-            },
-            {
                 "command": "antigravity.quickPickQuota",
                 "title": "Antigravity: Quick View Quota",
                 "icon": "$(list-unordered)"
@@ -73,11 +68,6 @@
             }
         ],
         "keybindings": [
-            {
-                "command": "antigravity.toggleAutoAccept",
-                "key": "ctrl+alt+shift+u",
-                "when": "activeEditor"
-            },
             {
                 "command": "antigravity.quickPickQuota",
                 "key": "ctrl+shift+q",
@@ -128,7 +118,8 @@
         "watch": "tsc -watch -p ./",
         "pretest": "npm run compile && npm run lint",
         "lint": "eslint src --ext ts",
-        "test": "node ./out/test/runTest.js"
+        "test": "node ./out/test/runTest.js",
+        "package": "vsce package"
     },
     "devDependencies": {
         "@types/express": "^5.0.6",

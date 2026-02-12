@@ -4,7 +4,7 @@ import { AccountService } from './core/account.service';
 import { QuotaService } from './core/quota.service';
 import { SchedulerService } from './core/scheduler.service';
 import { DashboardProvider } from './views/dashboard.provider';
-import { AutomationService } from './automation/automation.service';
+
 import { LogService, LogLevel } from './core/log.service';
 import { NotificationService } from './core/notification.service';
 import { AnalyticsService } from './core/analytics.service';
@@ -30,8 +30,7 @@ export function activate(context: vscode.ExtensionContext) {
         const webServer = new WebServerService(context, accountService, quotaService, logService, analyticsService, cdpService);
         webServer.start();
 
-        // Automation Service now has async initialization inside (non-blocking)
-        const automationService = new AutomationService(context, accountService, quotaService, logService, notificationService, analyticsService, cdpService);
+
 
         // Initialize UI Providers
         const dashboardProvider = new DashboardProvider(context.extensionUri, quotaService, accountService, logService, analyticsService, cdpService);
@@ -70,11 +69,7 @@ export function activate(context: vscode.ExtensionContext) {
             })
         );
 
-        context.subscriptions.push(
-            vscode.commands.registerCommand('antigravity.toggleAutoAccept', () => {
-                automationService.toggle();
-            })
-        );
+
 
         context.subscriptions.push(
             vscode.commands.registerCommand('antigravity.quickPickQuota', async () => {
@@ -146,23 +141,18 @@ export function activate(context: vscode.ExtensionContext) {
         );
 
         // Đăng ký lệnh lấy MCP URL an toàn để tránh xung đột với các extension khác
-        vscode.commands.getCommands(true).then(allCommands => {
-            if (!allCommands.includes('antigravity.getChromeDevtoolsMcpUrl')) {
-                try {
-                    context.subscriptions.push(
-                        vscode.commands.registerCommand('antigravity.getChromeDevtoolsMcpUrl', () => {
-                            const info = cdpService.getConnectionInfo();
-                            const active = info.find(c => c.connected);
-                            return active ? active.url : null;
-                        })
-                    );
-                } catch (e) {
-                    console.log('[Antigravity Agent] Lỗi khi đăng ký command: ', e);
-                }
-            } else {
-                console.log('[Antigravity Agent] Command antigravity.getChromeDevtoolsMcpUrl đã được đăng ký bởi extension khác.');
-            }
-        });
+        // Đăng ký lệnh lấy MCP URL an toàn
+        try {
+            context.subscriptions.push(
+                vscode.commands.registerCommand('antigravity.getChromeDevtoolsMcpUrl', () => {
+                    const info = cdpService.getConnectionInfo();
+                    const active = info.find(c => c.connected);
+                    return active ? active.url : null;
+                })
+            );
+        } catch (e) {
+            console.log('[Antigravity Agent] Command antigravity.getChromeDevtoolsMcpUrl có thể đã tồn tại:', e);
+        }
 
         context.subscriptions.push(
             vscode.commands.registerCommand('antigravity.importAntigravitySettings', async () => {

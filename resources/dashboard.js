@@ -134,9 +134,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="monitor-id">${item.id}</div>
                 <div class="monitor-flags">
-                    <span class="flag ${item.injected ? 'active' : ''}">
-                        <i class="codicon codicon-bracket-dot"></i> Injected
-                    </span>
                     <span class="flag ${item.connected ? 'active' : ''}">
                         <i class="codicon codicon-zap"></i> Live
                     </span>

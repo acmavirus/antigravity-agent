@@ -172,30 +172,33 @@ export class AccountService {
                     const cleanHex = resultHex.replace(/\s+/g, '');
                     const buffer = Buffer.from(cleanHex, 'hex');
                     const session = ProtobufDecoder.decode(buffer);
-                    const email = session?.context?.email || `Antigravity User`;
-                    const base64Data = buffer.toString('base64');
+                    const email = session?.context?.email;
 
-                    const existingIndex = this.accounts.findIndex(a => a.name === email);
-                    if (existingIndex !== -1) {
-                        const existingId = this.accounts[existingIndex].id;
-                        this.accounts[existingIndex].lastChecked = Date.now();
-                        await this.saveSecret(existingId, { raw: base64Data });
-                        await this.saveAccounts();
-                        vscode.window.showInformationMessage(`Session synced: ${email}`);
-                        return true;
-                    } else {
-                        const id = `antigravity-${Date.now()}`;
-                        this.accounts.push({
-                            id,
-                            name: email,
-                            type: 'client',
-                            status: AccountStatus.Active,
-                            lastChecked: Date.now()
-                        });
-                        await this.saveSecret(id, { raw: base64Data });
-                        await this.saveAccounts();
-                        vscode.window.showInformationMessage(`Account automatically imported: ${email}`);
-                        return true;
+                    if (email) {
+                        const base64Data = buffer.toString('base64');
+                        const existingIndex = this.accounts.findIndex(a => a.name === email);
+
+                        if (existingIndex !== -1) {
+                            const existingId = this.accounts[existingIndex].id;
+                            this.accounts[existingIndex].lastChecked = Date.now();
+                            await this.saveSecret(existingId, { raw: base64Data });
+                            await this.saveAccounts();
+                            vscode.window.showInformationMessage(`Session synced: ${email}`);
+                            return true;
+                        } else {
+                            const id = `antigravity-${Date.now()}`;
+                            this.accounts.push({
+                                id,
+                                name: email,
+                                type: 'client',
+                                status: AccountStatus.Active,
+                                lastChecked: Date.now()
+                            });
+                            await this.saveSecret(id, { raw: base64Data });
+                            await this.saveAccounts();
+                            vscode.window.showInformationMessage(`Account automatically imported: ${email}`);
+                            return true;
+                        }
                     }
                 }
             }
