@@ -157,25 +157,29 @@ export class AccountService {
         try {
             if (process.platform === 'win32') {
                 const dbPath = path.join(os.homedir(), 'AppData', 'Roaming', 'Antigravity', 'User', 'globalStorage', 'state.vscdb');
-                const query = "SELECT value FROM ItemTable WHERE key = 'jetskiStateSync.agentManagerInitState'";
+                const query = "SELECT hex(value) FROM ItemTable WHERE key = 'jetskiStateSync.agentManagerInitState'";
                 const command = `sqlite3 "${dbPath}" "${query}"`;
 
-                const result = await new Promise<string>((resolve) => {
+                const resultHex = await new Promise<string>((resolve) => {
                     exec(command, (error, stdout) => {
                         if (error) resolve('ERROR');
                         else resolve(stdout.trim());
                     });
                 });
 
-                if (result && result !== 'ERROR' && result !== '') {
-                    const session = ProtobufDecoder.decode(result);
+                if (resultHex && resultHex !== 'ERROR' && resultHex !== '') {
+                    // Xóa tất cả khoảng trắng/xuống dòng do sqlite3 có thể format output
+                    const cleanHex = resultHex.replace(/\s+/g, '');
+                    const buffer = Buffer.from(cleanHex, 'hex');
+                    const session = ProtobufDecoder.decode(buffer);
                     const email = session?.context?.email || `Antigravity User`;
+                    const base64Data = buffer.toString('base64');
 
                     const existingIndex = this.accounts.findIndex(a => a.name === email);
                     if (existingIndex !== -1) {
                         const existingId = this.accounts[existingIndex].id;
                         this.accounts[existingIndex].lastChecked = Date.now();
-                        await this.saveSecret(existingId, { raw: result });
+                        await this.saveSecret(existingId, { raw: base64Data });
                         await this.saveAccounts();
                         vscode.window.showInformationMessage(`Session synced: ${email}`);
                         return true;
@@ -188,7 +192,7 @@ export class AccountService {
                             status: AccountStatus.Active,
                             lastChecked: Date.now()
                         });
-                        await this.saveSecret(id, { raw: result });
+                        await this.saveSecret(id, { raw: base64Data });
                         await this.saveAccounts();
                         vscode.window.showInformationMessage(`Account automatically imported: ${email}`);
                         return true;
@@ -224,32 +228,54 @@ export class AccountService {
         }
     }
 
+    private cachedActiveEmail: { email: string | null, timestamp: number } | null = null;
+    private readonly ACTIVE_EMAIL_CACHE_TTL = 30000; // 30 seconds
+
     public async getActiveEmail(): Promise<string | null> {
         if (process.platform !== 'win32') return null;
 
+        const now = Date.now();
+        if (this.cachedActiveEmail && (now - this.cachedActiveEmail.timestamp) < this.ACTIVE_EMAIL_CACHE_TTL) {
+            return this.cachedActiveEmail.email;
+        }
+
         const dbPath = path.join(os.homedir(), 'AppData', 'Roaming', 'Antigravity', 'User', 'globalStorage', 'state.vscdb');
-        const query = "SELECT value FROM ItemTable WHERE key = 'jetskiStateSync.agentManagerInitState'";
+        if (!fs.existsSync(dbPath)) return null;
+
+        const query = "SELECT hex(value) FROM ItemTable WHERE key = 'jetskiStateSync.agentManagerInitState'";
         const command = `sqlite3 "${dbPath}" "${query}"`;
 
         try {
-            const result = await new Promise<string>((resolve) => {
-                exec(command, (error, stdout) => {
+            const resultHex = await new Promise<string>((resolve) => {
+                const child = exec(command, { timeout: 2000 }, (error, stdout) => {
                     if (error) resolve('');
                     else resolve(stdout.trim());
                 });
             });
 
-            if (result) {
-                const session = ProtobufDecoder.decode(result);
-                return session?.context?.email || null;
+            let email: string | null = null;
+            if (resultHex) {
+                // Xóa tất cả khoảng trắng/xuống dòng do sqlite3 có thể format output
+                const cleanHex = resultHex.replace(/\s+/g, '');
+                const buffer = Buffer.from(cleanHex, 'hex');
+                const session = ProtobufDecoder.decode(buffer);
+                email = session?.context?.email || null;
             }
-        } catch (e) { }
-        return null;
+
+            this.cachedActiveEmail = { email, timestamp: now };
+            return email;
+        } catch (e) {
+            return null;
+        }
     }
 
     public async switchAccount(id: string) {
         const release = await this.mutex.acquire();
         console.log(`[AccountService] Initiating switch to account ID: ${id}`);
+
+        // Xóa cache ngay lập tức khi thực hiện switch
+        this.cachedActiveEmail = null;
+
         const tempSqlPath = path.join(os.tmpdir(), `antigravity_switch_${Date.now()}.sql`);
 
         try {

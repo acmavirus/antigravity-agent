@@ -68,3 +68,7 @@ temp/
 *.swp
 *~
 old/
+
+# Custom Ignores
+AntigravityMobile/
+external/AntigravityMobile/

@@ -1,3 +1,4 @@
+// Copyright by AcmaTvirus
 import * as vscode from 'vscode';
 import axios from 'axios';
 import NodeCache from 'node-cache';
@@ -9,6 +10,8 @@ import { AnalyticsService } from './analytics.service';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as https from 'https';
+import * as path from 'path';
+import * as fs from 'fs';
 
 const execAsync = promisify(exec);
 
@@ -46,6 +49,8 @@ export class QuotaService {
     private statusBarItems: Map<string, vscode.StatusBarItem> = new Map();
     private readonly STORAGE_KEY_PINNED = 'antigravity.pinnedModelId';
     private localConnection: { port: number, token: string } | null = null;
+    private lastRefreshTime: number = 0;
+    private readonly REFRESH_THROTTLE = 60000; // 1 minute
 
     private readonly BASE_URL = "https://daily-cloudcode-pa.sandbox.googleapis.com";
     private readonly TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -106,58 +111,92 @@ export class QuotaService {
         this.loadPersistentQuotas();
     }
 
-    private loadPersistentQuotas() {
-        const data = this.context.globalState.get<Record<string, ModelQuota[]>>(this.STORAGE_KEY_QUOTAS);
-        if (data) {
-            for (const [accountId, quotas] of Object.entries(data)) {
-                this.cache.set(accountId, quotas);
+    private get quotaFilePath(): string {
+        return path.join(this.context.globalStorageUri.fsPath, 'quotas.json');
+    }
+
+    private async loadPersistentQuotas() {
+        try {
+            // Đảm bảo thư mục tồn tại
+            if (!fs.existsSync(this.context.globalStorageUri.fsPath)) {
+                await vscode.workspace.fs.createDirectory(this.context.globalStorageUri);
             }
+
+            // Ưu tiên load từ file (migration)
+            if (fs.existsSync(this.quotaFilePath)) {
+                const content = fs.readFileSync(this.quotaFilePath, 'utf8');
+                const data = JSON.parse(content);
+                for (const [accountId, quotas] of Object.entries(data)) {
+                    this.cache.set(accountId, quotas);
+                }
+            } else {
+                // Nếu chưa có file, thử load từ globalState (legacy)
+                const data = this.context.globalState.get<Record<string, ModelQuota[]>>(this.STORAGE_KEY_QUOTAS);
+                if (data) {
+                    for (const [accountId, quotas] of Object.entries(data)) {
+                        this.cache.set(accountId, quotas);
+                    }
+                    // Save ngay vào file để migrate
+                    await this.savePersistentQuotas();
+                }
+            }
+        } catch (e) {
+            console.error('Error loading persistent quotas:', e);
         }
     }
 
     private async savePersistentQuotas() {
-        const allQuotas: Record<string, ModelQuota[]> = {};
-        const keys = this.cache.keys();
-        for (const key of keys) {
-            const val = this.cache.get<ModelQuota[]>(key);
-            if (val) allQuotas[key] = val;
+        try {
+            const allQuotas: Record<string, ModelQuota[]> = {};
+            const keys = this.cache.keys();
+            for (const key of keys) {
+                const val = this.cache.get<ModelQuota[]>(key);
+                if (val) allQuotas[key] = val;
+            }
+
+            // Ghi vào file thay vì globalState để không bị lỗi "large extension state"
+            fs.writeFileSync(this.quotaFilePath, JSON.stringify(allQuotas), 'utf8');
+
+            // Xóa dữ liệu cũ ở globalState nếu có (để giảm kích thước storage)
+            if (this.context.globalState.get(this.STORAGE_KEY_QUOTAS)) {
+                await this.context.globalState.update(this.STORAGE_KEY_QUOTAS, undefined);
+            }
+        } catch (e) {
+            console.error('Error saving persistent quotas:', e);
         }
-        await this.context.globalState.update(this.STORAGE_KEY_QUOTAS, allQuotas);
     }
 
     public async refreshAll(forceAll: boolean = false) {
+        const now = Date.now();
+        if (!forceAll && (now - this.lastRefreshTime) < this.REFRESH_THROTTLE) {
+            return;
+        }
+        this.lastRefreshTime = now;
+
         const accounts = this.accountService.getAccounts();
         const activeEmail = forceAll ? null : await this.accountService.getActiveEmail();
 
         for (const account of accounts) {
             if (account.status === AccountStatus.Forbidden) continue;
 
-            // Nếu không phải forceAll, chỉ cập nhật tài khoản đang active
             if (!forceAll && activeEmail && account.name !== activeEmail) {
                 continue;
             }
 
             try {
-                // Lấy thông tin tài khoản đầy đủ (bao gồm cả data bí mật)
                 const fullAccount = await this.accountService.getAccountWithData(account.id);
                 if (!fullAccount) continue;
 
                 const freshQuotas = await this.fetchQuotaRealtime(fullAccount);
                 if (freshQuotas && freshQuotas.length > 0) {
-                    // Chuyển sang cơ chế REPLACE hoàn toàn thay vì MERGE để tránh trùng lặp
-                    // do modelId thay đổi giữa các nguồn fetch (Cloud vs Local)
                     const updatedQuotas = freshQuotas;
-
-                    // Track usage (giả định dùng tokens) cho tài khoản active
                     this.analyticsService.trackUsage(account.id, 10);
-
                     this.cache.set(account.id, updatedQuotas);
                     await this.savePersistentQuotas();
 
                     if (!forceAll || account.name === activeEmail) {
                         this.updateStatusBar(updatedQuotas);
                     }
-
                     this.logService.addLog(LogLevel.Info, `Refreshed ${updatedQuotas.length} quotas for ${account.name}`, 'Quota');
                 }
             } catch (error: any) {
@@ -204,7 +243,8 @@ export class QuotaService {
                         "Authorization": `Bearer ${accessToken}`,
                         "Content-Type": "application/json",
                         "User-Agent": "antigravity/windows/amd64",
-                    }
+                    },
+                    timeout: 10000
                 }
             );
 
@@ -217,9 +257,7 @@ export class QuotaService {
                     const qi = modelInfo.quotaInfo;
                     const fraction = typeof qi.remainingFraction === 'number' ? qi.remainingFraction : 0;
                     const resetTimeRaw = qi.resetTime || "";
-
                     const remainingPercent = Math.floor(fraction * 100);
-
                     const meta = this.MODEL_METADATA[key];
 
                     result.push({
@@ -248,7 +286,7 @@ export class QuotaService {
                 client_secret: this.CLIENT_SECRET,
                 refresh_token: idToken,
                 grant_type: "refresh_token",
-            });
+            }, { timeout: 5000 });
             return response.data.access_token || null;
         } catch (e) {
             return null;
@@ -265,12 +303,12 @@ export class QuotaService {
                         "Authorization": `Bearer ${accessToken}`,
                         "Content-Type": "application/json",
                         "User-Agent": "antigravity/windows/amd64",
-                    }
+                    },
+                    timeout: 5000
                 }
             );
             return response.data.cloudaicompanionProject || response.data.project || response.data.projectId || null;
         } catch (e) {
-            // Try local fallback if cloud fails
             const local = await this.findLocalAntigravity();
             if (local) {
                 this.localConnection = local;
@@ -281,9 +319,10 @@ export class QuotaService {
     }
 
     private async findLocalAntigravity(): Promise<{ port: number, token: string } | null> {
+        if (this.localConnection) return this.localConnection;
         try {
-            const command = `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'csrf_token' } | Select-Object ProcessId,CommandLine | ConvertTo-Json"`;
-            const { stdout } = await execAsync(command, { timeout: 5000 });
+            const command = `powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"Name LIKE '%Antigravity%' OR Name LIKE '%Cursor%'\\" | Select-Object ProcessId,CommandLine | ConvertTo-Json"`;
+            const { stdout } = await execAsync(command, { timeout: 3000 });
             if (!stdout) return null;
 
             let processes = JSON.parse(stdout);
@@ -299,9 +338,8 @@ export class QuotaService {
                 const token = tokenMatch[1];
                 const pid = proc.ProcessId;
 
-                // Scan common ports for this PID
                 const portCmd = `powershell -NoProfile -Command "Get-NetTCPConnection -State Listen -OwningProcess ${pid} | Select-Object -ExpandProperty LocalPort"`;
-                const { stdout: portOut } = await execAsync(portCmd);
+                const { stdout: portOut } = await execAsync(portCmd, { timeout: 2000 });
                 const ports = portOut.match(/\b\d+\b/g)?.map(Number) || [];
 
                 for (const port of ports) {
@@ -318,7 +356,7 @@ export class QuotaService {
             const req = https.request({
                 hostname: '127.0.0.1', port, path: '/exa.language_server_pb.LanguageServerService/GetUserStatus',
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Codeium-Csrf-Token': token },
-                timeout: 1000, rejectUnauthorized: false
+                timeout: 500, rejectUnauthorized: false
             }, (res) => resolve(res.statusCode === 200));
             req.on('error', () => resolve(false));
             req.write(JSON.stringify({ metadata: { ideName: 'antigravity' } }));
@@ -331,7 +369,7 @@ export class QuotaService {
             const req = https.request({
                 hostname: '127.0.0.1', port, path: '/exa.language_server_pb.LanguageServerService/GetUserStatus',
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Codeium-Csrf-Token': token },
-                rejectUnauthorized: false
+                rejectUnauthorized: false, timeout: 2000
             }, (res) => {
                 let data = '';
                 res.on('data', chunk => data += chunk);
@@ -374,24 +412,17 @@ export class QuotaService {
     }
 
     public async startMonitoring() {
-        // Mặc định 60 giây nếu không cấu hình
         const intervalSec = vscode.workspace.getConfiguration('antigravity').get('updateInterval', 60) as number;
         const intervalMs = intervalSec * 1000;
-
-        // Chạy ngay lần đầu
         await this.refreshAll(false);
-
-        // Sau đó chạy định kỳ
         setInterval(() => this.refreshAll(false), intervalMs);
     }
 
     private async updateStatusBar(quotas: ModelQuota[]) {
         if (quotas.length === 0) return;
-
         const activeEmail = await this.accountService.getActiveEmail();
         const accounts = this.accountService.getAccounts();
         const activeAccount = accounts.find(a => a.name === activeEmail);
-
         if (!activeAccount) return;
 
         const pools = this.getPools(activeAccount.id);
@@ -405,7 +436,6 @@ export class QuotaService {
             barItem.show();
         }
 
-        // Sử dụng pinnedId đã lấy từ đầu hàm
         let displayText = '';
         let hasWarning = false;
 
@@ -427,7 +457,6 @@ export class QuotaService {
 
         barItem.text = displayText || 'Antigravity: No Data';
         barItem.tooltip = `Antigravity Quota Monitor - Click to view details`;
-
         if (hasWarning) barItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
         else barItem.backgroundColor = undefined;
     }
@@ -438,9 +467,7 @@ export class QuotaService {
         const items: any[] = [];
 
         for (const account of accounts) {
-            // Chỉ hiển thị model của tài khoản đang active
             if (activeEmail && account.name !== activeEmail) continue;
-
             const qs = this.cache.get<ModelQuota[]>(account.id);
             if (qs) {
                 qs.forEach(q => {
@@ -457,8 +484,7 @@ export class QuotaService {
         const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Select Model to display on the status bar' });
         if (picked) {
             await this.context.globalState.update(this.STORAGE_KEY_PINNED, picked.id);
-            // Cập nhật ngay hạn mức khi người dùng đổi model
-            await this.refreshAll(false);
+            await this.refreshAll(true);
         }
     }
 

@@ -8,6 +8,7 @@ import { LogService, LogLevel } from './log.service';
 
 export class SchedulerService {
     private processedResets: Set<string> = new Set();
+    private isWakingUp: boolean = false;
 
     constructor(
         private context: vscode.ExtensionContext,
@@ -59,42 +60,46 @@ export class SchedulerService {
     }
 
     private async performWakeUp() {
-        console.log('[Scheduler] Checking Auto Wake-up schedule...');
-        const accounts = this.accountService.getAccounts();
-        let wakeUpCount = 0;
+        if (this.isWakingUp) return;
+        this.isWakingUp = true;
 
-        for (const account of accounts) {
-            const quotas = this.quotaService.getCachedQuotas(account.id);
-            if (!quotas || quotas.length === 0) continue;
+        try {
+            console.log('[Scheduler] Checking Auto Wake-up schedule...');
+            const accounts = this.accountService.getAccounts();
+            let wakeUpCount = 0;
 
-            for (const model of quotas) {
-                // Key định danh cho mốc reset này: accountId + modelId + resetTime
-                const resetKey = `${account.id}-${model.modelId}-${model.resetTime}`;
+            for (const account of accounts) {
+                const quotas = this.quotaService.getCachedQuotas(account.id);
+                if (!quotas || quotas.length === 0) continue;
 
-                if (this.processedResets.has(resetKey)) continue;
+                for (const model of quotas) {
+                    const resetKey = `${account.id}-${model.modelId}-${model.resetTime}`;
+                    if (this.processedResets.has(resetKey)) continue;
 
-                if (this.isResetTimePassed(model)) {
-                    console.log(`[Scheduler] Activating model ${model.displayName} for account ${account.name} (Reset time: ${model.resetTime})`);
+                    if (this.isResetTimePassed(model)) {
+                        console.log(`[Scheduler] Activating model ${model.displayName} for account ${account.name} (Reset time: ${model.resetTime})`);
 
-                    await this.quotaService.refreshAll(true);
-                    this.processedResets.add(resetKey);
-                    wakeUpCount++;
+                        await this.quotaService.refreshAll(true);
+                        this.processedResets.add(resetKey);
+                        wakeUpCount++;
 
-                    this.logService.addLog(LogLevel.Success, `Auto-activation successful: ${model.displayName} (${model.resetTime})`, 'Scheduler');
-
-                    // Giới hạn chỉ log 1 lần cho mỗi đợt quét của tài khoản
-                    break;
+                        this.logService.addLog(LogLevel.Success, `Auto-activation successful: ${model.displayName} (${model.resetTime})`, 'Scheduler');
+                        break;
+                    }
                 }
             }
-        }
 
-        if (wakeUpCount > 0) {
-            vscode.window.showInformationMessage(`🚀 Auto Wake-up: Awakened ${wakeUpCount} models that just reset.`);
-        }
+            if (wakeUpCount > 0) {
+                vscode.window.showInformationMessage(`🚀 Auto Wake-up: Awakened ${wakeUpCount} models that just reset.`);
+            }
 
-        // Dọn dẹp bộ nhớ đệm resetKey cũ (quá 24h)
-        if (this.processedResets.size > 100) {
-            this.processedResets.clear();
+            if (this.processedResets.size > 200) {
+                this.processedResets.clear();
+            }
+        } catch (e: any) {
+            console.error('[Scheduler] Wake-up error:', e.message);
+        } finally {
+            this.isWakingUp = false;
         }
     }
 
@@ -105,13 +110,11 @@ export class SchedulerService {
         if (resetTimeRaw) {
             const now = Date.now();
             const diffMs = now - resetTimeRaw;
-            // Chấp nhận nếu đã qua ít nhất 0ms và không quá 30 phút
             return diffMs >= 0 && diffMs < 30 * 60 * 1000;
         }
 
         if (!resetTimeStr || resetTimeStr === "Never" || resetTimeStr === "Unknown") return false;
         try {
-            // Fallback parsing logic
             const parts = resetTimeStr.split(' ');
             if (parts.length < 2) return false;
 

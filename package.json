@@ -58,6 +58,18 @@
                 "command": "antigravity.quickPickQuota",
                 "title": "Antigravity: Quick View Quota",
                 "icon": "$(list-unordered)"
+            },
+            {
+                "command": "antigravity.importAntigravitySettings",
+                "title": "Antigravity: Import Settings"
+            },
+            {
+                "command": "antigravity.importAntigravityExtensions",
+                "title": "Antigravity: Import Extensions"
+            },
+            {
+                "command": "antigravity.prioritized.chat.open",
+                "title": "Antigravity: Open Chat Dashboard"
             }
         ],
         "keybindings": [

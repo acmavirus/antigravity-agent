@@ -19,6 +19,7 @@ interface CdpPage {
 
 interface CdpConnection {
     ws: any;
+    url: string;
     injected: boolean;
     lastConfigHash?: string;
 }
@@ -127,7 +128,7 @@ export class CdpService {
 
                 ws.on('open', () => {
                     clearTimeout(timeout);
-                    this.connections.set(id, { ws, injected: false });
+                    this.connections.set(id, { ws, url, injected: false });
                     console.log(`[CDP] Connected to ${id}`);
                     resolve(true);
                 });
@@ -146,16 +147,23 @@ export class CdpService {
         });
     }
 
+    private cachedScript: string | null = null;
+
     private async injectScript(id: string) {
         const conn = this.connections.get(id);
         if (!conn) return;
 
         try {
             if (!conn.injected) {
-                const scriptPath = this.context.asAbsolutePath(path.join('resources', 'cdp-inject.js'));
-                if (fs.existsSync(scriptPath)) {
-                    const scriptContent = fs.readFileSync(scriptPath, 'utf8');
-                    await this.evaluate(id, scriptContent);
+                if (!this.cachedScript) {
+                    const scriptPath = this.context.asAbsolutePath(path.join('resources', 'cdp-inject.js'));
+                    if (fs.existsSync(scriptPath)) {
+                        this.cachedScript = fs.readFileSync(scriptPath, 'utf8');
+                    }
+                }
+
+                if (this.cachedScript) {
+                    await this.evaluate(id, this.cachedScript);
                     conn.injected = true;
                 }
             }
@@ -414,8 +422,9 @@ export class CdpService {
         for (const [id, conn] of this.connections) {
             info.push({
                 id,
+                url: conn.url,
                 injected: conn.injected,
-                connected: conn.ws.readyState === 1
+                connected: conn.ws?.readyState === 1
             });
         }
         return info;

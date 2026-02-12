@@ -145,6 +145,43 @@ export function activate(context: vscode.ExtensionContext) {
             })
         );
 
+        // Đăng ký lệnh lấy MCP URL an toàn để tránh xung đột với các extension khác
+        vscode.commands.getCommands(true).then(allCommands => {
+            if (!allCommands.includes('antigravity.getChromeDevtoolsMcpUrl')) {
+                try {
+                    context.subscriptions.push(
+                        vscode.commands.registerCommand('antigravity.getChromeDevtoolsMcpUrl', () => {
+                            const info = cdpService.getConnectionInfo();
+                            const active = info.find(c => c.connected);
+                            return active ? active.url : null;
+                        })
+                    );
+                } catch (e) {
+                    console.log('[Antigravity Agent] Lỗi khi đăng ký command: ', e);
+                }
+            } else {
+                console.log('[Antigravity Agent] Command antigravity.getChromeDevtoolsMcpUrl đã được đăng ký bởi extension khác.');
+            }
+        });
+
+        context.subscriptions.push(
+            vscode.commands.registerCommand('antigravity.importAntigravitySettings', async () => {
+                vscode.window.showInformationMessage('Importing Antigravity settings...');
+            })
+        );
+
+        context.subscriptions.push(
+            vscode.commands.registerCommand('antigravity.importAntigravityExtensions', async () => {
+                vscode.window.showInformationMessage('Importing Antigravity extensions...');
+            })
+        );
+
+        context.subscriptions.push(
+            vscode.commands.registerCommand('antigravity.prioritized.chat.open', () => {
+                vscode.commands.executeCommand('antigravity-dashboard.focus');
+            })
+        );
+
         // Initial load - Thêm delay 2s để IDE khởi tạo xong Language Server
         setTimeout(() => {
             quotaService.startMonitoring().catch(err => console.error('Quota monitoring failed:', err));

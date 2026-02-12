@@ -54,7 +54,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                     // Delay nhẹ để đảm bảo DB đã được ghi xong và UI kịp cập nhật log nếu có
                     await new Promise(resolve => setTimeout(resolve, 1000));
                     console.log(`[Dashboard] Executing reloadWindow...`);
-                    vscode.commands.executeCommand('workbench.action.reloadWindow');
+                    // vscode.commands.executeCommand('workbench.action.reloadWindow');
                     break;
                 case 'clearLogs':
                     await this.logService.clearLogs();
